@@ -48,6 +48,16 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
+      - name: Download gradle-wrapper.jar
+        run: |
+          echo "=== Downloading gradle-wrapper.jar ==="
+          mkdir -p gradle/wrapper
+          cd gradle/wrapper
+          wget -q https://services.gradle.org/distributions/gradle-8.10-bin.zip
+          echo "Downloaded gradle-8.10-bin.zip"
+          ls -lah
+          cd ../..
+      
       - name: Full System Clean
         run: |
           echo "=== Performing full system clean ==="
@@ -161,6 +171,13 @@ jobs:
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
+      
+      - name: Download gradle-wrapper.jar
+        run: |
+          mkdir -p gradle/wrapper
+          cd gradle/wrapper
+          wget -q https://services.gradle.org/distributions/gradle-8.10-bin.zip
+          cd ../..
       
       - name: Run lint checks
         run: |
