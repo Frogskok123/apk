@@ -31,7 +31,7 @@ jobs:
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r21e
+          ndk-version: r25c
           add-to-path: true
       
       - name: Set up Android SDK
@@ -47,27 +47,6 @@ jobs:
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-      
-      - name: Initialize Gradle Wrapper
-        run: |
-          echo "=== Initializing Gradle Wrapper ==="
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "Gradle wrapper JAR not found, downloading..."
-            mkdir -p gradle/wrapper
-            cd gradle/wrapper
-            curl -L -o gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar
-            cd ../..
-            echo "Gradle wrapper JAR downloaded successfully"
-          else
-            echo "Gradle wrapper JAR already exists"
-          fi
-          ls -lah gradle/wrapper/gradle-wrapper.jar
-      
-      - name: Validate Gradle wrapper
-        run: |
-          echo "=== Validating Gradle Wrapper ==="
-          ./gradlew --version
-          echo "Gradle wrapper validated successfully"
       
       - name: Full System Clean
         run: |
@@ -124,7 +103,7 @@ jobs:
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
-          ndk-version: r21e
+          ndk-version: r25c
           add-to-path: true
       
       - name: Build with ndk-build
@@ -182,16 +161,6 @@ jobs:
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
-      
-      - name: Initialize Gradle Wrapper
-        run: |
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "Gradle wrapper JAR not found, downloading..."
-            mkdir -p gradle/wrapper
-            cd gradle/wrapper
-            curl -L -o gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar
-            cd ../..
-          fi
       
       - name: Run lint checks
         run: |
