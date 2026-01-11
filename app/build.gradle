@@ -51,15 +51,16 @@ android {
         }
     }
 
-    lintOptions {
+    lint {
         disable 'MissingTranslation', 'ExtraTranslation', 'MissingDimensionality'
         checkReleaseBuilds false
         abortOnError false
     }
 
-    packagingOptions {
-        exclude 'META-INF/proguard/androidx-*.pro'
-        exclude 'META-INF/MANIFEST.MF'
+    packaging {
+        resources {
+            excludes += ['META-INF/proguard/androidx-*.pro', 'META-INF/MANIFEST.MF']
+        }
     }
 }
 
