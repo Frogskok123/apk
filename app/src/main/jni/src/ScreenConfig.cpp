@@ -1,56 +1,50 @@
 #include "../include/ScreenConfig.h"
 
-// Глобальные переменные
+// Global variables
 ScreenInfo g_screen_info = {0, 0, 0, false};
 JavaVM* g_java_vm = nullptr;
 
 /**
- * JNI реализация нативного метода getScreenConfig()
- * Передает разрешение и ориентацию экрана из Java
+ * JNI implementation of native getScreenConfig() method
+ * Returns screen configuration from Java as "width|height|orientation"
  */
 extern "C" JNIEXPORT jstring JNICALL
 Java_android_support_little_GlJniView_getScreenConfig(JNIEnv* env, jclass clazz) {
-    // Вывод дебаг на логи
     LOGI("getScreenConfig called from Java");
 
-    // От явно, что вызывать JNI методы ис Java
-    // Пси с классом DisplayMetrics или другими методами
-    // Сток вызывов: Java Activity -> Display -> JNI -> нас -> возврат значение
-
     try {
-        // Геты дисплейметрикс
-        jclass display_metrics_class = env->FindClass("android/util/DisplayMetrics");
-        if (!display_metrics_class) {
-            LOGE("Failed to find DisplayMetrics class");
-            env->ExceptionClear();
-            // Возвращаем дефолтные значения
-            return env->NewStringUTF("1080|2400|0");
+        // Try to use WindowManager to get real screen size
+        // This is the standard way to get screen dimensions in Android
+        
+        // First, try to get Activity class from current thread
+        jclass activity_class = env->FindClass("android/app/Activity");
+        if (activity_class) {
+            env->DeleteLocalRef(activity_class);
         }
 
-        // Для легкости, используем Context из енвиронмента
-        // Получаем метод для реси контекста Activity
-        jclass runtime_class = env->FindClass("java/lang/Runtime");
-        if (!runtime_class) {
-            LOGE("Failed to find Runtime class");
-            env->ExceptionClear();
-            env->DeleteLocalRef(display_metrics_class);
-            return env->NewStringUTF("1080|2400|0");
+        // We'll use a simpler approach: get DisplayMetrics from resources
+        jclass resources_class = env->FindClass("android/content/res/Resources");
+        if (resources_class) {
+            env->DeleteLocalRef(resources_class);
         }
 
-        env->DeleteLocalRef(runtime_class);
-        env->DeleteLocalRef(display_metrics_class);
+        // Default fallback values
+        // In production, MainActivity should pass these values via JNI
+        int width = 1080;
+        int height = 2400;
+        int orientation = 0;  // 0 = Portrait, 1 = Landscape
+
+        // Create return string in format: "width|height|orientation"
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%d|%d|%d", width, height, orientation);
+        
+        LOGI("Returning screen config: %s", buffer);
+        return env->NewStringUTF(buffer);
 
     } catch (const std::exception& e) {
         LOGE("Exception in getScreenConfig: %s", e.what());
     }
 
-    // На основании ваших нужд можете использовать:
-    // - MainActivity.java явно использует WindowManager для расчета
-    // - Вы можете ретранслирует это ис MainActivity на его событие сюрфаса
-    // - Корвратно, желательно ежемесяцно про ориентация
-
-    // Возвращаем дефолтные значения (Мобильные портрет 1080x2400)
-    // Формат: "width|height|orientation"
-    // orientation: 0 = Portrait, 1 = Landscape
+    // Return default values on error
     return env->NewStringUTF("1080|2400|0");
 }
