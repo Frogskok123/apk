@@ -68,6 +68,13 @@ public class GlJniView extends SurfaceView implements SurfaceHolder.Callback {
     public static native void imgui_Shutdown();
     public static native void MotionEventClick(boolean down, float PosX, float PosY);
 
+    /**
+     * Получение разрешения экрана и ориентации через JNI
+     * Возвращает строку в формате: "width|height|orientation"
+     * orientation: 0 = Portrait, 1 = Landscape
+     */
+    public static native String getScreenConfig();
+
     // --- Методы совместимости (Убирают ошибки в MainActivity) ---
     
     // MainActivity вызывает это. Просто перенаправляем вызов в resize.
