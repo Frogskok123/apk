@@ -72,8 +72,8 @@ jobs:
       - name: Full System Clean
         run: |
           echo "=== Performing full system clean ==="
-          ./gradlew clean
-          ./gradlew cleanBuildCache
+          ./gradlew clean --no-daemon
+          ./gradlew cleanBuildCache --no-daemon
           find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
           find . -type d -name ".gradle" -exec rm -rf {} + 2>/dev/null || true
           rm -rf app/src/main/jniLibs/
@@ -196,7 +196,7 @@ jobs:
       - name: Run lint checks
         run: |
           echo "Running lint checks..."
-          ./gradlew lint --info 2>&1 | tee lint.log || true
+          ./gradlew lint --info --no-daemon 2>&1 | tee lint.log || true
         continue-on-error: true
       
       - name: Check results
