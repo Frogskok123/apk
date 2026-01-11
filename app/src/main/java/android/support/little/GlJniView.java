@@ -8,8 +8,8 @@ import android.view.SurfaceView;
 
 public class GlJniView extends SurfaceView implements SurfaceHolder.Callback {
 
-    // --- Восстанавливаем поле fontData (убирает ошибку в MyService) ---
-    public static byte[] fontData; 
+    // Font data for ImGui rendering
+    public static byte[] fontData;
 
     private Thread renderThread;
     private boolean isRunning = false;
@@ -21,11 +21,11 @@ public class GlJniView extends SurfaceView implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        // Инициализация Vulkan
+        // Initialize Vulkan
         initVulkan(holder.getSurface());
         
         isRunning = true;
-        // Исправлено: Используем new Runnable() вместо лямбды (убирает синтаксические ошибки)
+        // Use anonymous Runnable class for Java 8 compatibility
         renderThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -61,35 +61,30 @@ public class GlJniView extends SurfaceView implements SurfaceHolder.Callback {
         return true;
     }
 
-    // --- Native Methods (Новые) ---
+    // Native methods
     public static native void initVulkan(Surface surface);
     public static native void resize(int width, int height);
     public static native void step();
     public static native void imgui_Shutdown();
-    public static native void MotionEventClick(boolean down, float PosX, float PosY);
+    public static native void MotionEventClick(boolean down, float posX, float posY);
 
     /**
-     * Получение разрешения экрана и ориентации через JNI
-     * Возвращает строку в формате: "width|height|orientation"
+     * Get screen configuration and orientation through JNI
+     * Returns string in format: "width|height|orientation"
      * orientation: 0 = Portrait, 1 = Landscape
      */
     public static native String getScreenConfig();
 
-    // --- Методы совместимости (Убирают ошибки в MainActivity) ---
-    
-    // MainActivity вызывает это. Просто перенаправляем вызов в resize.
+    // Compatibility methods - forward calls to resize
     public static void ScreenSize(int width, int height) {
         resize(width, height);
     }
 
-    // MainActivity вызывает это при повороте. Тоже перенаправляем.
     public static void real(int width, int height) {
         resize(width, height);
     }
     
-    // MainActivity вызывает getWindowRect. Возвращаем заглушку.
-    // Если вам нужна реальная логика, её нужно реализовать, но для компиляции этого достаточно.
     public static String getWindowRect() {
-        return "0|0|1080|2400"; 
+        return "0|0|1080|2400";
     }
 }
