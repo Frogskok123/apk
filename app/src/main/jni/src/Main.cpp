@@ -1,4 +1,4 @@
-// Zalypa Kernel - Main.cpp (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+// Zalypa Kernel - Main.cpp
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -51,7 +51,7 @@ void NumIoSave(const char *name) {
     }
     if (numSave) {
         fseek(numSave, 0, SEEK_SET);
-        fwrite(NumIo, sizeof(float) * 400, 1, numSave); // 400 для сохранения всех пушек
+        fwrite(NumIo, sizeof(float) * 400, 1, numSave);
         fwrite(DrawIo, sizeof(bool) * 50, 1, numSave);
         fwrite(NumIos, sizeof(float) * 50, 1, numSave);
         fwrite(intIo, sizeof(int) * 10, 1, numSave);
@@ -79,21 +79,18 @@ void NumIoLoad(const char *name) {
 
 int main(int argc, char *argv[]) {
     
-    
     screen_config(); 
-    // ВОЗВРАЩАЕМ ОРИГИНАЛЬНУЮ ЛОГИКУ КВАДРАТНОГО ОКНА
     ::abs_ScreenX = (displayInfo.height > displayInfo.width ? displayInfo.height : displayInfo.width);
     ::abs_ScreenY = (displayInfo.height < displayInfo.width ? displayInfo.height : displayInfo.width);
     ::native_window_screen_x = abs_ScreenX;
-    ::native_window_screen_y = abs_ScreenX; // Это важно! Квадрат для Vulkan
+    ::native_window_screen_y = abs_ScreenX;
 
     if (!initGUI_draw(native_window_screen_x, native_window_screen_y, false)) return -1;
     
     NumIoLoad("Zalypathebest");
     
-    // ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ МЕНЮ ПРИ ЗАПУСКЕ
-    BallSwitch = true; 
-    MemuSwitch = false;
+    g_ballSwitch = true; 
+    g_menuSwitch = false;
 
     timer FPS_Limit;
     FPS_Limit.AotuFPS_init();
@@ -103,15 +100,15 @@ int main(int argc, char *argv[]) {
     Touch::setOrientation(displayInfo.orientation);
 
     new std::thread(AimBotAuto, ImGui::GetForegroundDrawList());
-    LoadTextureFromMemory((const void *)&笑脸, sizeof(笑脸), &悬浮球);
-    LoadTextureFromMemory((const void *)&自瞄关, sizeof(自瞄关), &悬浮自瞄开关);
+    LoadTextureFromMemory((const void *)&g_ballTexture, sizeof(g_ballTexture), &g_ballTextureHandle);
+    LoadTextureFromMemory((const void *)&g_aimToggleTexture, sizeof(g_aimToggleTexture), &g_aimToggleHandle);
 
     while (main_thread_flag) {
         FPS_Limit.SetFps(NumIo[12]);
         FPS_Limit.AotuFPS();
         drawBegin();
         win1();
-        if (初始化) DrawPlayer(ImGui::GetForegroundDrawList());
+        if (g_systemInitialized) DrawPlayer(ImGui::GetForegroundDrawList());
         drawEnd();
         std::this_thread::sleep_for(1ms);
     }
@@ -120,7 +117,6 @@ int main(int argc, char *argv[]) {
     return 1;
 }
 
-// ... Остальные функции win1() и ColoredButton копируй из прошлого сообщения ...
 bool ColoredButton(const char* label, const ImVec2& size, ImU32 color, ImU32 hover_color, ImU32 active_color) {
     ImGui::PushStyleColor(ImGuiCol_Button, color);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover_color);
@@ -131,6 +127,15 @@ bool ColoredButton(const char* label, const ImVec2& size, ImU32 color, ImU32 hov
     ImGui::PopStyleColor(3);
     return pressed;
 }
+
+struct UIState {
+    bool homeTab = true;
+    bool espTab = false;
+    bool aimbotTab = false;
+    bool itemsTab = false;
+};
+
+UIState g_uiState;
 
 void win1() {
     Io = &ImGui::GetIO();
@@ -144,23 +149,23 @@ void win1() {
 
     if (BgTexture.DS == nullptr) LoadTextureFromMemory(Fonkk, sizeof(Fonkk), &BgTexture);
 
-    if (BallSwitch) {
+    if (g_ballSwitch) {
         ImGui::SetNextWindowSize(ImVec2(200, 200), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Ball", &BallSwitch, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar);
+        ImGui::Begin("Ball", &g_ballSwitch, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar);
         Pos = ImGui::GetWindowPos();
-        DrawLogo({Pos.x + 50, Pos.y + 50}, 85, 悬浮球.DS);
+        DrawLogo({Pos.x + 50, Pos.y + 50}, 85, g_ballTextureHandle.DS);
         if (ImGui::IsItemActive()) {
             if (!IsDown) { IsDown = true; ImagePos = Pos; }
         } else if (IsDown) {
             IsDown = false;
             if (abs(ImagePos.x - ImGui::GetWindowPos().x) < 5.0f) {
-                MemuSwitch = true; BallSwitch = false;
+                g_menuSwitch = true; g_ballSwitch = false;
             }
         }
         ImGui::End();
     }
 
-    if (MemuSwitch) {
+    if (g_menuSwitch) {
         float win_w = 1275.0f, win_h = 825.0f;
         ImGui::SetNextWindowPos(ImVec2((displayInfo.width - win_w) / 2.0f, (displayInfo.height - win_h) / 2.0f), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(win_w, win_h), ImGuiCond_Always);
@@ -168,22 +173,30 @@ void win1() {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
 
-        ImGui::Begin("Fuck Kernel - Peace", &MemuSwitch, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+        ImGui::Begin("Zalypa Kernel - Menu", &g_menuSwitch, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
         {
             ImGui::BeginChild("Sidebar", ImVec2(300, 0), true);
             {
                 ImVec2 b_size = ImVec2(270, 70);
                 ImGui::Dummy(ImVec2(0, 40));
-                if (ColoredButton("HOME", b_size, 界面.侧边1 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=true; 界面.侧边2=false; 界面.侧边3=false; 界面.侧边4=false; }
+                if (ColoredButton("HOME", b_size, g_uiState.homeTab ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 
+                    g_uiState.homeTab = true; g_uiState.espTab = false; g_uiState.aimbotTab = false; g_uiState.itemsTab = false;
+                }
                 ImGui::Dummy(ImVec2(0, 12));
-                if (ColoredButton("ESP", b_size, 界面.侧边2 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=true; 界面.侧边3=false; 界面.侧边4=false; }
+                if (ColoredButton("ESP", b_size, g_uiState.espTab ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 
+                    g_uiState.homeTab = false; g_uiState.espTab = true; g_uiState.aimbotTab = false; g_uiState.itemsTab = false;
+                }
                 ImGui::Dummy(ImVec2(0, 12));
-                if (ColoredButton("AIMBOT", b_size, 界面.侧边3 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=false; 界面.侧边3=true; 界面.侧边4=false; }
+                if (ColoredButton("AIMBOT", b_size, g_uiState.aimbotTab ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 
+                    g_uiState.homeTab = false; g_uiState.espTab = false; g_uiState.aimbotTab = true; g_uiState.itemsTab = false;
+                }
                 ImGui::Dummy(ImVec2(0, 12));
-                if (ColoredButton("ITEMS", b_size, 界面.侧边4 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=false; 界面.侧边3=false; 界面.侧边4=true; }
+                if (ColoredButton("ITEMS", b_size, g_uiState.itemsTab ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 
+                    g_uiState.homeTab = false; g_uiState.espTab = false; g_uiState.aimbotTab = false; g_uiState.itemsTab = true;
+                }
                 
                 if (ImGui::GetContentRegionAvail().y > 80.0f) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetContentRegionAvail().y - 80.0f);
-                if (ColoredButton("HIDE MENU", b_size, col_red_btn, col_red_btn, col_red_btn)) { MemuSwitch = false; BallSwitch = true; }
+                if (ColoredButton("HIDE MENU", b_size, col_red_btn, col_red_btn, col_red_btn)) { g_menuSwitch = false; g_ballSwitch = true; }
             }
             ImGui::EndChild();
 
@@ -197,18 +210,18 @@ void win1() {
 
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Zalypa Kernel"); 
                 ImGui::SameLine(ImGui::GetWindowWidth() - 100);
-                if (ImGui::Button("-", ImVec2(60, 40))) { BallSwitch = true; MemuSwitch = false; }
+                if (ImGui::Button("-", ImVec2(60, 40))) { g_ballSwitch = true; g_menuSwitch = false; }
 
                 ImGui::BeginChild("Content", ImVec2(0, 0), true);
                 {
-                    if (界面.侧边1) {
+                    if (g_uiState.homeTab) {
                         float cw = ImGui::GetContentRegionAvail().x;
                         ImGui::Dummy(ImVec2(0, 20));
-                        if(初始化) {
+                        if(g_systemInitialized) {
                             if (ColoredButton("STOP CHEAT SYSTEM", ImVec2(cw, 80), col_red_btn, col_red_btn, col_red_btn)) exit(0);
                         } else {
                             if (ColoredButton("INITIALIZE SYSTEM", ImVec2(cw, 80), col_green_btn, col_green_btn, col_green_btn)) {
-                                if (DrawInt() == 0) { 初始化 = true; DrawIo[0] = true; }
+                                if (DrawInt() == 0) { g_systemInitialized = true; DrawIo[0] = true; }
                             }
                         }
                         ImGui::Dummy(ImVec2(0, 20));
@@ -221,7 +234,7 @@ void win1() {
                         ImGui::Text("Base: %p", libbase);
                     }
 
-                    if (界面.侧边2) {
+                    if (g_uiState.espTab) {
                         ImGui::Text("Visual Settings"); ImGui::Separator();
                         ImGui::Columns(2, nullptr, false);
                         ImGui::Checkbox("Box", &DrawIo[1]); ImGui::Checkbox("Line", &DrawIo[2]);
@@ -234,7 +247,7 @@ void win1() {
                         ImGui::SliderFloat("FPS Limit", &NumIo[12], 60, 144, "%.0f");
                     }
 
-                    if (界面.侧边3) {
+                    if (g_uiState.aimbotTab) {
                         ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.7f);
                         ImGui::Checkbox("Enable Aimbot", &DrawIo[20]);
                         ImGui::Checkbox("Floating Toggle", &DrawIo[26]);
@@ -288,7 +301,7 @@ void win1() {
                         ImGui::PopItemWidth();
                     }
 
-                    if (界面.侧边4) {
+                    if (g_uiState.itemsTab) {
                         ImGui::Checkbox("Metro boxes", &DrawIo[10]);
                         ImGui::Checkbox("Vehicles", &DrawIo[15]);
                         ImGui::Checkbox("Grenade Warning", &DrawIo[14]);
