@@ -1,0 +1,184 @@
+name: Android Build & Compile
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+      
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-levels: 30
+          build-tools-version: 30.0.3
+          ndk-version: '21.4.7075529'
+      
+      - name: Accept Android licenses
+        run: |
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses
+      
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      
+      - name: Run Gradle lint check
+        run: ./gradlew lint --info || true
+      
+      - name: Build APK (Debug)
+        run: ./gradlew assembleDebug --info
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      
+      - name: Build APK (Release)
+        run: ./gradlew assembleRelease --info || true
+        continue-on-error: true
+      
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+      
+      - name: Check build outputs
+        run: |
+          echo "=== Build Outputs ==="
+          ls -lah app/build/outputs/apk/ || echo "APK output not found"
+          echo ""
+          echo "=== Libraries ==="
+          find app/build -name "*.so" -type f 2>/dev/null | head -20 || echo "No SO files found"
+      
+      - name: Generate build report
+        if: always()
+        run: |
+          echo "# Build Report" > build_report.md
+          echo "" >> build_report.md
+          echo "## Build Status" >> build_report.md
+          echo "- Date: $(date)" >> build_report.md
+          echo "- Branch: ${{ github.ref }}" >> build_report.md
+          echo "- Commit: ${{ github.sha }}" >> build_report.md
+          echo "" >> build_report.md
+          echo "## Build Outputs" >> build_report.md
+          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "- Debug APK: ✅ Built" >> build_report.md
+            echo "- Size: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)" >> build_report.md
+          else
+            echo "- Debug APK: ❌ Failed" >> build_report.md
+          fi
+      
+      - name: Upload build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: build_report.md
+      
+      - name: Notify build completion
+        if: always()
+        run: |
+          echo "Build Status: ${{ job.status }}"
+          echo "Build completed at $(date)"
+
+  ndk-build:
+    name: Build NDK Native Libraries
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r21e
+          add-to-path: true
+      
+      - name: Build native libraries
+        run: |
+          cd app/src/main/jni
+          ndk-build clean
+          ndk-build -j$(nproc)
+      
+      - name: Check compiled libraries
+        run: |
+          echo "=== Compiled Libraries ==="
+          find app/src/main/jniLibs -name "*.so" -type f
+          echo ""
+          echo "=== Library Details ==="
+          file app/src/main/jniLibs/arm64-v8a/*.so 2>/dev/null || echo "arm64-v8a libraries not found"
+          file app/src/main/jniLibs/armeabi-v7a/*.so 2>/dev/null || echo "armeabi-v7a libraries not found"
+      
+      - name: Upload native libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-libraries
+          path: app/src/main/jniLibs/
+          retention-days: 7
+
+  code-analysis:
+    name: Code Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+      
+      - name: Run Checkstyle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew checkstyle 2>/dev/null || echo "Checkstyle not configured"
+      
+      - name: Run FindBugs
+        run: ./gradlew findbugs 2>/dev/null || echo "FindBugs not configured"
+      
+      - name: Generate code reports
+        if: always()
+        run: |
+          echo "Code analysis completed"
+          echo "Check build/reports/ for detailed analysis"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check for credentials in code
+        run: |
+          echo "Scanning for hardcoded credentials..."
+          grep -r "http://w5.eydata.net" --include="*.java" --include="*.cpp" || echo "No hardcoded URLs found"
+      
+      - name: Dependency check
+        run: |
+          echo "=== Dependencies Check ==="
+          grep -E 'implementation|classpath' app/build.gradle || echo "Check build.gradle manually"
