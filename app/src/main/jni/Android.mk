@@ -19,12 +19,20 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/include/Encrypt
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include/Http
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include/Vulkan
 LOCAL_C_INCLUDES += $(LOCAL_PATH)/include/ImGui
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/src
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/src/ImGui
+LOCAL_C_INCLUDES += $(LOCAL_PATH)/src/Vulkan
 
-# Source files
+# Source files - Main
 LOCAL_SRC_FILES := \
     src/Main.cpp \
     src/JNI_Bridge.cpp \
     src/ScreenConfig.cpp \
+    src/draw.cpp \
+    src/aimbot.cpp
+
+# Source files - ImGui
+LOCAL_SRC_FILES += \
     src/ImGui/Draw.cpp \
     src/ImGui/TouchHelperA.cpp \
     src/ImGui/imgui.cpp \
@@ -34,9 +42,14 @@ LOCAL_SRC_FILES := \
     src/ImGui/imgui_widgets.cpp \
     src/ImGui/imgui_impl_android.cpp \
     src/ImGui/imgui_impl_vulkan.cpp \
-    src/ImGui/stb_image.cpp \
+    src/ImGui/stb_image.cpp
+
+# Source files - Vulkan
+LOCAL_SRC_FILES += \
     src/Vulkan/vulkan_wrapper.cpp \
-    src/Vulkan/VulkanUtils.cpp
+    src/Vulkan/VulkanUtils.cpp \
+    src/Vulkan/VulkanMain.cpp \
+    src/Vulkan/CreateShaderModule.cpp
 
 # Library name
 LOCAL_MODULE := littleHack
