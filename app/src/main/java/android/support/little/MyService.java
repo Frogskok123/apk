@@ -26,7 +26,7 @@ public class MyService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-		//获取真实分辨率，此方法只适用于 <=安卓11 的客户端
+		// Get real resolution - compatible with Android <= 11
 		manager = (WindowManager) this.getSystemService(Context.WINDOW_SERVICE);
 		point = new Point();
 		manager.getDefaultDisplay().getRealSize(point);
@@ -37,11 +37,11 @@ public class MyService extends Service {
 			screenHeight = point.x;
 		}
 		try {
-			InputStream in =getAssets().open("zt.ttf");
+			InputStream in = getAssets().open("zt.ttf");
 			GlJniView.fontData = new byte[in.available()];
-			in.read(GlJniView.fontData);		
+			in.read(GlJniView.fontData);
 		} catch (Exception e) {}
-		//创建窗口视图
+		// Create float window view
         SetFloatView();
     }
 
@@ -56,8 +56,8 @@ public class MyService extends Service {
         } else {
             wmParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY;
         }
-        wmParams.format = PixelFormat.RGBA_8888;//窗口透明
-		wmParams.flags =  WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        wmParams.format = PixelFormat.RGBA_8888;
+		wmParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             wmParams.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
@@ -99,4 +99,3 @@ public class MyService extends Service {
     }
 
 }
-
