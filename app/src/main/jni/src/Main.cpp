@@ -11,13 +11,12 @@
 #include <malloc.h>
 #include <iostream>
 #include <ctime>
+#include <thread>
 
-#include "res/weiyan.h"
-#include "res/cJSON.h"
-#include "res/cJSON.c"
-#include "res/Encrypt.h"
-#include "Draw.h"
-#include "VulkanUtils.h"
+#include "../include/main.h"
+#include "../include/tool.h"
+#include "../include/ScreenConfig.h"
+#include "../include/ImGui/imgui.h"
 
 using namespace std;
 
@@ -26,13 +25,6 @@ int abs_ScreenX = 0;
 int abs_ScreenY = 0;
 int Pattern;
 float VersionNumber = 2.0;
-
-#include "ModuleInstaller.h"
-#include "main.h"
-#include "draw.cpp"
-#include "aimbot.cpp"
-
-
 
 void config() {
     NumIos[13] = 2;
@@ -99,7 +91,9 @@ int main(int argc, char *argv[]) {
     Touch::Init({(float)displayInfo.width, (float)displayInfo.height}, false);
     Touch::setOrientation(displayInfo.orientation);
 
-    new std::thread(AimBotAuto, ImGui::GetForegroundDrawList());
+    std::thread aimbot_thread(AimBotAuto, ImGui::GetForegroundDrawList());
+    aimbot_thread.detach();
+    
     LoadTextureFromMemory((const void *)&g_ballTexture, sizeof(g_ballTexture), &g_ballTextureHandle);
     LoadTextureFromMemory((const void *)&g_aimToggleTexture, sizeof(g_aimToggleTexture), &g_aimToggleHandle);
 
@@ -110,11 +104,11 @@ int main(int argc, char *argv[]) {
         win1();
         if (g_systemInitialized) DrawPlayer(ImGui::GetForegroundDrawList());
         drawEnd();
-        std::this_thread::sleep_for(1ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     Touch::Close();
     shutdown();
-    return 1;
+    return 0;
 }
 
 bool ColoredButton(const char* label, const ImVec2& size, ImU32 color, ImU32 hover_color, ImU32 active_color) {
