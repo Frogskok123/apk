@@ -1,1 +1,33 @@
+# Build directories
 /build
+.gradle/
+app/build/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local properties
+local.properties
+gradlew.bat
+
+# NDK
+obj/
+libs/
+app/src/main/jniLibs/
+
+# Logs
+*.log
+logs/
+
+# Gradle (but NOT gradle wrapper JAR and properties)
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
