@@ -6,6 +6,7 @@ android {
     namespace 'android.support.little'
     compileSdk 34
     buildToolsVersion "34.0.0"
+    ndkVersion "25.2.9519653"
 
     defaultConfig {
         applicationId "android.support.little"
