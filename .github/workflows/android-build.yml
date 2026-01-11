@@ -48,6 +48,17 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
+      - name: Full System Clean
+        run: |
+          echo "=== Performing full system clean ==="
+          ./gradlew clean
+          ./gradlew cleanBuildCache
+          find . -type d -name "build" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name ".gradle" -exec rm -rf {} + 2>/dev/null || true
+          rm -rf app/src/main/jniLibs/
+          rm -rf .gradle/
+          echo "=== Gradle cache cleared ==="
+      
       - name: Validate Gradle wrapper
         run: |
           if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
@@ -58,7 +69,7 @@ jobs:
       - name: Build APK (Debug)
         run: |
           echo "Starting Gradle build..."
-          ./gradlew clean assembleDebug --info --no-daemon -x lint 2>&1 | tee build.log
+          ./gradlew clean assembleDebug --info --no-daemon --refresh-dependencies -x lint 2>&1 | tee build.log
         continue-on-error: false
       
       - name: Check build outputs
