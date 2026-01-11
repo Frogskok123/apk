@@ -24,6 +24,7 @@ LOCAL_C_INCLUDES += $(LOCAL_PATH)/include/ImGui
 LOCAL_SRC_FILES := \
     src/Main.cpp \
     src/JNI_Bridge.cpp \
+    src/ScreenConfig.cpp \
     src/ImGui/Draw.cpp \
     src/ImGui/TouchHelperA.cpp \
     src/ImGui/imgui.cpp \
@@ -37,8 +38,8 @@ LOCAL_SRC_FILES := \
     src/Vulkan/vulkan_wrapper.cpp \
     src/Vulkan/VulkanUtils.cpp
 
-# --- Имя библиотеки (будет libzalypa.so) ---
-LOCAL_MODULE := zalypa
+# --- Имя библиотеки (будет libzalypa.so / liblittleHack.so) ---
+LOCAL_MODULE := littleHack
 
 # --- Библиотеки Android ---
 # Добавлено: -lvulkan (для вулкана), -landroid (для работы с окнами)
