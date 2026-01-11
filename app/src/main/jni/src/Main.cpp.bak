@@ -1,0 +1,314 @@
+// Zalypa Kernel - Main.cpp (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <pthread.h>
+#include <fstream>
+#include <string.h>
+#include <time.h>
+#include <malloc.h>
+#include <iostream>
+#include <ctime>
+
+#include "res/weiyan.h"
+#include "res/cJSON.h"
+#include "res/cJSON.c"
+#include "res/Encrypt.h"
+#include "Draw.h"
+#include "VulkanUtils.h"
+
+using namespace std;
+
+bool main_thread_flag = true;
+int abs_ScreenX = 0;
+int abs_ScreenY = 0;
+int Pattern;
+float VersionNumber = 2.0;
+
+#include "ModuleInstaller.h"
+#include "main.h"
+#include "draw.cpp"
+#include "aimbot.cpp"
+
+
+
+void config() {
+    NumIos[13] = 2;
+    NumIo[1] = 300.0f;  NumIo[2] = 400.0f;  NumIo[3] = 150.0f; 
+    NumIo[4] = 1.4f;    NumIo[5] = 670.0f;  NumIo[6] = 1400.0f;
+    NumIo[7] = 300.0f;  NumIo[8] = 2.0f;    NumIo[9] = 9.0f;
+    NumIo[11] = 600.0f; NumIo[12] = 144;    NumIo[16] = 15.0f;
+    NumIo[19] = 100.0f; NumIo[21] = 300.0f; NumIo[28] = 1.4f;
+    NumIo[35] = 150.0f;
+}
+
+void NumIoSave(const char *name) {
+    if (numSave == nullptr) {
+        string SaveFile = "/data/" + string(name);
+        numSave = fopen(SaveFile.c_str(), "wb+");
+    }
+    if (numSave) {
+        fseek(numSave, 0, SEEK_SET);
+        fwrite(NumIo, sizeof(float) * 400, 1, numSave); // 400 для сохранения всех пушек
+        fwrite(DrawIo, sizeof(bool) * 50, 1, numSave);
+        fwrite(NumIos, sizeof(float) * 50, 1, numSave);
+        fwrite(intIo, sizeof(int) * 10, 1, numSave);
+        fflush(numSave);
+        fsync(fileno(numSave));
+    }
+}
+
+void NumIoLoad(const char *name) {
+    ColorInitialization();
+    if (numSave == nullptr) {
+        string SaveFile = "/data/" + string(name);
+        numSave = fopen(SaveFile.c_str(), "rb+");
+    }
+    if (numSave != nullptr) {
+        fseek(numSave, 0, SEEK_SET);
+        fread(NumIo, sizeof(float) * 400, 1, numSave);
+        fread(DrawIo, sizeof(bool) * 50, 1, numSave);
+        fread(NumIos, sizeof(float) * 50, 1, numSave);
+        fread(intIo, sizeof(int) * 10, 1, numSave);
+    } else {
+        config();
+    }
+}
+
+int main(int argc, char *argv[]) {
+    puts("\u001B[1;37m");
+    printf("choice: 1.No background 2.background: ");
+    cin >> Pattern;
+    if (Pattern == 2) {
+        pid_t pid = fork();
+        if (pid > 0) exit(0);
+    }
+
+    
+    GyroModuleInstaller::autoCheck();
+    
+    screen_config(); 
+    // ВОЗВРАЩАЕМ ОРИГИНАЛЬНУЮ ЛОГИКУ КВАДРАТНОГО ОКНА
+    ::abs_ScreenX = (displayInfo.height > displayInfo.width ? displayInfo.height : displayInfo.width);
+    ::abs_ScreenY = (displayInfo.height < displayInfo.width ? displayInfo.height : displayInfo.width);
+    ::native_window_screen_x = abs_ScreenX;
+    ::native_window_screen_y = abs_ScreenX; // Это важно! Квадрат для Vulkan
+
+    if (!initGUI_draw(native_window_screen_x, native_window_screen_y, false)) return -1;
+    
+    NumIoLoad("Zalypathebest");
+    
+    // ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ МЕНЮ ПРИ ЗАПУСКЕ
+    BallSwitch = true; 
+    MemuSwitch = false;
+
+    timer FPS_Limit;
+    FPS_Limit.AotuFPS_init();
+    FPS_Limit.setAffinity();
+
+    Touch::Init({(float)displayInfo.width, (float)displayInfo.height}, false);
+    Touch::setOrientation(displayInfo.orientation);
+
+    new std::thread(AimBotAuto, ImGui::GetForegroundDrawList());
+    LoadTextureFromMemory((const void *)&笑脸, sizeof(笑脸), &悬浮球);
+    LoadTextureFromMemory((const void *)&自瞄关, sizeof(自瞄关), &悬浮自瞄开关);
+
+    while (main_thread_flag) {
+        FPS_Limit.SetFps(NumIo[12]);
+        FPS_Limit.AotuFPS();
+        drawBegin();
+        win1();
+        if (初始化) DrawPlayer(ImGui::GetForegroundDrawList());
+        drawEnd();
+        std::this_thread::sleep_for(1ms);
+    }
+    Touch::Close();
+    shutdown();
+    return 1;
+}
+
+// ... Остальные функции win1() и ColoredButton копируй из прошлого сообщения ...
+bool ColoredButton(const char* label, const ImVec2& size, ImU32 color, ImU32 hover_color, ImU32 active_color) {
+    ImGui::PushStyleColor(ImGuiCol_Button, color);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover_color);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, active_color);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+    bool pressed = ImGui::Button(label, size);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    return pressed;
+}
+
+void win1() {
+    Io = &ImGui::GetIO();
+    ImGuiStyle &style = ImGui::GetStyle();
+
+    const ImU32 col_sidebar_btn    = IM_COL32(70, 100, 230, 255);
+    const ImU32 col_sidebar_hover  = IM_COL32(90, 120, 250, 255);
+    const ImU32 col_sidebar_active = IM_COL32(50, 80, 200, 255);
+    const ImU32 col_green_btn      = IM_COL32(60, 220, 100, 255);
+    const ImU32 col_red_btn        = IM_COL32(220, 60, 60, 255);
+
+    if (BgTexture.DS == nullptr) LoadTextureFromMemory(Fonkk, sizeof(Fonkk), &BgTexture);
+
+    if (BallSwitch) {
+        ImGui::SetNextWindowSize(ImVec2(200, 200), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Ball", &BallSwitch, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar);
+        Pos = ImGui::GetWindowPos();
+        DrawLogo({Pos.x + 50, Pos.y + 50}, 85, 悬浮球.DS);
+        if (ImGui::IsItemActive()) {
+            if (!IsDown) { IsDown = true; ImagePos = Pos; }
+        } else if (IsDown) {
+            IsDown = false;
+            if (abs(ImagePos.x - ImGui::GetWindowPos().x) < 5.0f) {
+                MemuSwitch = true; BallSwitch = false;
+            }
+        }
+        ImGui::End();
+    }
+
+    if (MemuSwitch) {
+        float win_w = 1275.0f, win_h = 825.0f;
+        ImGui::SetNextWindowPos(ImVec2((displayInfo.width - win_w) / 2.0f, (displayInfo.height - win_h) / 2.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(win_w, win_h), ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
+
+        ImGui::Begin("Fuck Kernel - Peace", &MemuSwitch, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+        {
+            ImGui::BeginChild("Sidebar", ImVec2(300, 0), true);
+            {
+                ImVec2 b_size = ImVec2(270, 70);
+                ImGui::Dummy(ImVec2(0, 40));
+                if (ColoredButton("HOME", b_size, 界面.侧边1 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=true; 界面.侧边2=false; 界面.侧边3=false; 界面.侧边4=false; }
+                ImGui::Dummy(ImVec2(0, 12));
+                if (ColoredButton("ESP", b_size, 界面.侧边2 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=true; 界面.侧边3=false; 界面.侧边4=false; }
+                ImGui::Dummy(ImVec2(0, 12));
+                if (ColoredButton("AIMBOT", b_size, 界面.侧边3 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=false; 界面.侧边3=true; 界面.侧边4=false; }
+                ImGui::Dummy(ImVec2(0, 12));
+                if (ColoredButton("ITEMS", b_size, 界面.侧边4 ? col_sidebar_hover : col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) { 界面.侧边1=false; 界面.侧边2=false; 界面.侧边3=false; 界面.侧边4=true; }
+                
+                if (ImGui::GetContentRegionAvail().y > 80.0f) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetContentRegionAvail().y - 80.0f);
+                if (ColoredButton("HIDE MENU", b_size, col_red_btn, col_red_btn, col_red_btn)) { MemuSwitch = false; BallSwitch = true; }
+            }
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+
+            ImGui::BeginGroup();
+            {
+                ImVec2 p_min = ImGui::GetCursorScreenPos();
+                ImVec2 size = ImGui::GetContentRegionAvail();
+                if (BgTexture.DS != nullptr) ImGui::GetWindowDrawList()->AddImage((ImTextureID)BgTexture.DS, p_min, ImVec2(p_min.x + size.x, p_min.y + size.y), ImVec2(0,0), ImVec2(1,1), IM_COL32(120, 120, 120, 255));
+
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Zalypa Kernel"); 
+                ImGui::SameLine(ImGui::GetWindowWidth() - 100);
+                if (ImGui::Button("-", ImVec2(60, 40))) { BallSwitch = true; MemuSwitch = false; }
+
+                ImGui::BeginChild("Content", ImVec2(0, 0), true);
+                {
+                    if (界面.侧边1) {
+                        float cw = ImGui::GetContentRegionAvail().x;
+                        ImGui::Dummy(ImVec2(0, 20));
+                        if(初始化) {
+                            if (ColoredButton("STOP CHEAT SYSTEM", ImVec2(cw, 80), col_red_btn, col_red_btn, col_red_btn)) exit(0);
+                        } else {
+                            if (ColoredButton("INITIALIZE SYSTEM", ImVec2(cw, 80), col_green_btn, col_green_btn, col_green_btn)) {
+                                if (DrawInt() == 0) { 初始化 = true; DrawIo[0] = true; }
+                            }
+                        }
+                        ImGui::Dummy(ImVec2(0, 20));
+                        if (ColoredButton("Save Config", ImVec2((cw-10)/2, 60), col_sidebar_btn, col_sidebar_hover, col_sidebar_active)) NumIoSave("Zalypathebest");
+                        ImGui::SameLine();
+                        if (ColoredButton("Reset Config", ImVec2((cw-10)/2, 60), col_red_btn, col_red_btn, col_red_btn)) { config(); NumIoSave("Zalypathebest"); }
+                        ImGui::Separator();
+                        ImGui::Text("System Information:");
+                        ImGui::Text("UWorld: %p", Uworld);
+                        ImGui::Text("Base: %p", libbase);
+                    }
+
+                    if (界面.侧边2) {
+                        ImGui::Text("Visual Settings"); ImGui::Separator();
+                        ImGui::Columns(2, nullptr, false);
+                        ImGui::Checkbox("Box", &DrawIo[1]); ImGui::Checkbox("Line", &DrawIo[2]);
+                        ImGui::Checkbox("Skeleton", &DrawIo[3]); ImGui::Checkbox("Distance", &DrawIo[5]);
+                        ImGui::Checkbox("Health", &DrawIo[6]);
+                        ImGui::NextColumn();
+                        ImGui::Checkbox("Info", &DrawIo[4]); ImGui::Checkbox("360 Radar", &DrawIo[8]);
+                        ImGui::Checkbox("Weapon", &DrawIo[11]); ImGui::Checkbox("Ignore Bot", &DrawIo[29]);
+                        ImGui::Columns(1);
+                        ImGui::SliderFloat("FPS Limit", &NumIo[12], 60, 144, "%.0f");
+                    }
+
+                    if (界面.侧边3) {
+                        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.7f);
+                        ImGui::Checkbox("Enable Aimbot", &DrawIo[20]);
+                        ImGui::Checkbox("Floating Toggle", &DrawIo[26]);
+                        ImGui::SeparatorText("Filtering");
+                        ImGui::Checkbox("Ignore Knocked", &DrawIo[22]); ImGui::Checkbox("Ignore Bots", &DrawIo[23]);
+                        ImGui::Checkbox("Target Lock", &DrawIo[32]); ImGui::Checkbox("FOV Circle", &DrawIo[27]);
+                        ImGui::Checkbox("Aim Line", &DrawIo[24]);
+
+                        ImGui::SeparatorText("Configuration");
+                        const char* actModes[] = { "Fire Only", "ADS Only", "Fire & ADS", "Fire && ADS" };
+                        int curM = (int)NumIo[0];
+                        if (ImGui::Combo("Activation Mode", &curM, actModes, 4)) NumIo[0] = (float)curM;
+                        
+                        const char* tarModes[] = { "Crosshair", "Distance", "Hybrid" };
+                        int tarM = (int)NumIo[18];
+                        if (ImGui::Combo("Priority", &tarM, tarModes, 3)) NumIo[18] = (float)tarM;
+
+                        ImGui::SliderFloat("FOV Size", &NumIo[3], 10, 500, "%.0f px");
+                        ImGui::SeparatorText("Global Settings");
+                        ImGui::SliderFloat("Aim Speed", &NumIo[16], 1, 100, "%.1f");
+                        ImGui::SliderFloat("Smoothing", &NumIo[9], 1, 50, "%.0f");
+                        ImGui::SliderFloat("Bullet Velocity", &NumIo[11], 100, 1000, "%.0f");
+                        ImGui::SliderFloat("Prediction", &NumIo[22], 0.0, 3, "%.0f");
+                        ImGui::SeparatorText("Distance Limits");
+                        ImGui::SliderFloat("Max Hip Dist", &NumIo[19], 10, 300, "%.0f m");
+                        ImGui::SliderFloat("Max ADS Dist", &NumIo[21], 10, 500, "%.0f m");
+
+                        ImGui::SeparatorText("Recoil Global");
+                        ImGui::SliderFloat("Global Hip", &NumIo[4], 0, 3, "%.2f");
+                        ImGui::SliderFloat("Global ADS", &NumIo[28], 0, 3, "%.2f");
+
+                        ImGui::SeparatorText("Weapon Tuning");
+                        const char* weps[] = { "M762", "AKM", "M416", "SCAR-L", "M16A4", "Mk47", "AUG", "Groza", "G36C", "QBZ", "AC-VAL", "Honey Badger", "M249", "DP-28", "MG3", "UZI", "Vector", "PP-19", "MP5K", "UMP45", "Thompson", "P90" };
+                        static int selW = 0;
+                        ImGui::Combo("Select Weapon", &selW, weps, IM_ARRAYSIZE(weps));
+                        int base = 100 + (selW * 5);
+                        ImGui::SliderFloat("Wep Hip Recoil", &NumIo[base], 0, 3, "%.2f");
+                        ImGui::SliderFloat("Wep ADS Recoil", &NumIo[base+3], 0, 3, "%.2f");
+                        ImGui::SliderFloat("Wep Speed", &NumIo[base+1], 1, 100, "%.1f");
+                        ImGui::SliderFloat("Wep Smooth", &NumIo[base+2], 1, 50, "%.0f");
+                        if (ImGui::Button("Reset Weapon Settings", ImVec2(-1, 40))) { NumIo[base]=0; NumIo[base+1]=0; NumIo[base+2]=0; NumIo[base+3]=0; }
+
+                        ImGui::SeparatorText("Aim Bone");
+                        const char* bones[] = { "Chest (Default)", "Head", "Neck", "Pelvis" };
+                        int curB = (int)NumIo[8];
+                        if (ImGui::Combo("Bone", &curB, bones, 4)) NumIo[8] = (float)curB;
+
+                        if ((int)NumIo[8] == 1) ImGui::TextColored(ImVec4(1,0,0,1), "WARNING: Head - High Detection Risk");
+                        else ImGui::TextColored(ImVec4(0,1,0,1), "SAFE: Body - Recommended");
+
+                        ImGui::PopItemWidth();
+                    }
+
+                    if (界面.侧边4) {
+                        ImGui::Checkbox("Metro boxes", &DrawIo[10]);
+                        ImGui::Checkbox("Vehicles", &DrawIo[15]);
+                        ImGui::Checkbox("Grenade Warning", &DrawIo[14]);
+                    }
+                }
+                ImGui::EndChild();
+            }
+            ImGui::EndGroup();
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+    }
+}

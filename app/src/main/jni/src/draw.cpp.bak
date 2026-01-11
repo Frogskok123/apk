@@ -1,0 +1,1297 @@
+#include "main.h"
+#include "include.h"
+int 数量;
+int get_name_pid(const char *packageName) { 
+ int id = -1; 
+ DIR *dir; 
+ FILE *fp; 
+ char filename[64]; 
+ char cmdline[64]; 
+ struct dirent *entry; 
+ dir = opendir("/proc"); 
+ while ((entry = readdir(dir)) != NULL) { 
+  id = atoi(entry->d_name); 
+  if (id != 0) { 
+  sprintf(filename, "/proc/%d/cmdline", id); 
+  fp = fopen(filename, "r"); 
+  if (fp) { 
+   fgets(cmdline, sizeof(cmdline), fp); 
+   fclose(fp); 
+   if (strcmp(packageName, cmdline) == 0) { 
+    return id; 
+   } 
+  } 
+  } 
+ } closedir(dir); 
+ return -1; 
+}
+#include <vector>
+
+uintptr_t ReadPointerChain(uintptr_t base, std::vector<uintptr_t> offsets) {
+    uintptr_t current = base;
+    for (size_t i = 0; i < offsets.size(); i++) {
+        if (i == offsets.size() - 1) {
+            return current + offsets[i]; // Возвращаем финальный адрес
+        }
+        current = driver->read<uintptr_t>(current + offsets[i]);
+        if (current == 0) return 0; // Если указатель пустой — выходим
+    }
+    return 0;
+}
+bool bsAi;
+struct Actors {
+    uint64_t Enc_1, Enc_2;
+    uint64_t Enc_3, Enc_4;
+};
+
+struct Chunk {
+    uint32_t val_1, val_2, val_3, val_4;
+    uint32_t val_5, val_6, val_7, val_8;
+};
+
+uint64_t DecryptActorsArray(uint64_t uLevel, int Actors_Offset, int EncryptedActors_Offset) {
+    if (uLevel < 0x10000000)
+        return 0;
+ 
+    if (driver->read<uint64_t>(uLevel + Actors_Offset) > 0)
+		return uLevel + Actors_Offset;
+ 
+    if (driver->read<uint64_t>(uLevel + EncryptedActors_Offset) > 0)
+		return uLevel + EncryptedActors_Offset;
+ 
+    auto AActors = driver->read<Actors>(uLevel + EncryptedActors_Offset + 0x10);
+ 
+    if (AActors.Enc_1 > 0) {
+        auto Enc = driver->read<Chunk>(AActors.Enc_1 + 0x80);
+        return (((driver->read<uint8_t>(AActors.Enc_1 + Enc.val_1)
+            | (driver->read<uint8_t>(AActors.Enc_1 + Enc.val_2) << 8))
+            | (driver->read<uint8_t>(AActors.Enc_1 + Enc.val_3) << 0x10)) & 0xFFFFFF
+            | ((uint64_t)driver->read<uint8_t>(AActors.Enc_1 + Enc.val_4) << 0x18)
+            | ((uint64_t)driver->read<uint8_t>(AActors.Enc_1 + Enc.val_5) << 0x20)) & 0xFFFF00FFFFFFFFFF
+            | ((uint64_t)driver->read<uint8_t>(AActors.Enc_1 + Enc.val_6) << 0x28)
+            | ((uint64_t)driver->read<uint8_t>(AActors.Enc_1 + Enc.val_7) << 0x30)
+            | ((uint64_t)driver->read<uint8_t>(AActors.Enc_1 + Enc.val_8) << 0x38);
+    }
+    else if (AActors.Enc_2 > 0) {
+        auto Lost_Actors = driver->read<uint64_t>(AActors.Enc_2);
+        if (Lost_Actors > 0) {
+            return (uint16_t)(Lost_Actors - 0x400) & 0xFF00
+                | (uint8_t)(Lost_Actors - 0x04)
+                | (Lost_Actors + 0xFC0000) & 0xFF0000
+                | (Lost_Actors - 0x4000000) & 0xFF000000
+                | (Lost_Actors + 0xFC00000000) & 0xFF00000000
+                | (Lost_Actors + 0xFC0000000000) & 0xFF0000000000
+                | (Lost_Actors + 0xFC000000000000) & 0xFF000000000000
+                | (Lost_Actors - 0x400000000000000) & 0xFF00000000000000;
+        }
+    }
+    else if (AActors.Enc_3 > 0) {
+        auto Lost_Actors = driver->read<uint64_t>(AActors.Enc_3);
+        if (Lost_Actors > 0) {
+            return (Lost_Actors >> 0x38) | (Lost_Actors << (64 - 0x38));
+		}
+    }
+    else if (AActors.Enc_4 > 0) {
+        auto Lost_Actors = driver->read<uint64_t>(AActors.Enc_4);
+        if (Lost_Actors > 0) {
+            return Lost_Actors ^ 0xCDCD00;
+		}
+    }
+    return 0;
+}
+
+
+
+
+struct BoneSet {
+    int 头部, 胸部, 盆骨, 左肩膀, 右肩膀, 左手肘, 右手肘, 左手腕, 右手腕;
+    int 左大腿, 右大腿, 左膝盖, 右膝盖, 左脚腕, 右脚腕;
+};
+
+
+
+
+
+static std::unordered_map<int, BoneSet> boneCache = {
+    {29, {5,4,0, 7,13, 8,14, 9,15, 18,21, 19,22, 20,23}},
+    {65, {5,4,0, 11,32, 12,33, 63,62, 52,56, 53,57, 54,58}},
+    {67, {5,4,0, 13,34, 14,35, 16,37, 54,58, 55,59, 56,60}},
+    {26, {5,4,0, 13,6, 14,7, 15,8, 21,18, 22,19, 23,20}},
+    {27, {5,4,0, 7,10, 8,11, 9,12, 14,18, 15,19, 16,20}},
+    {30, {5,4,0, 9,14, 10,15, 11,16, 18,22, 19,23, 20,24}},
+    {38, {5,4,0, 7,17, 9,19, 11,21, 27,34, 28,35, 30,36}},
+    {42, {16,15,0, 20,31, 21,32, 22,33, 3,8, 4,9, 5,10}},
+    {46, {5,4,0, 21,8, 22,9, 23,10, 35,40, 36,41, 38,44}},
+    {61, {5,4,0, 6,27, 7,28, 8,29, 48,52, 49,53, 50,54}},
+    {63, {5,4,0, 8,30, 9,31, 10,32, 50,54, 51,55, 52,56}},
+    {64, {5,4,0, 7,29, 8,30, 9,31, 51,57, 52,58, 53,59}},
+    {68, {5,4,1, 11,33, 12,34, 13,35, 55,59, 56,60, 57,61}},
+    {70, {5,4,1, 6,34, 7,35, 8,36, 55,59, 56,60, 57,61}},
+    {72, {5,4,1, 12,34, 13,35, 14,36, 57,61, 58,62, 59,63}},
+    {76, {5,4,0, 7,27, 8,28, 9,29, 48,52, 49,53, 50,54}}
+};
+
+
+
+
+int DrawInt()
+{
+    char module_name[0x100] = "libUE4.so"; 
+    
+    // Сначала пробуем глобалку
+    pid_t epid = get_name_pid((char*)"com.tencent.ig");
+    
+    // Если не нашли (<= 0), пробуем тайвань
+    if (epid <= 0) epid = get_name_pid((char*)"com.rekoo.pubgm");
+    
+    // Если все еще не нашли, пробуем вьетнам
+    if (epid <= 0) epid = get_name_pid((char*)"com.vng.pubgmobile");
+    
+    // Если все еще не нашли, пробуем корею
+    if (epid <= 0) epid = get_name_pid((char*)"com.pubg.krmobile");
+
+    // Если после всех попыток всё равно ничего не нашли — выходим
+    if (epid <= 0)
+    {
+        return -1;
+    }
+    
+    driver->init(epid);
+    
+    libbase = driver->get_module_base(module_name);
+   Gname = driver->read<uintptr_t>(driver->read<uintptr_t>(libbase + 0xE2BA990) + 0x120);
+    return 0;
+}
+void DrawLogo(ImVec2 center, float size, ImTextureID icon)
+{
+    ImGui::SetCursorPos(
+    {
+        0, 180
+    }
+    );
+    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddImage(icon,
+    {
+        center.x - size / 2, center.y - size / 2
+    }
+    ,
+    {
+        center.x + size / 2, center.y + size / 2
+    }
+    );
+}
+void 绘制加粗文本(float size, float x, float y, ImColor color, ImColor color1, const char* str)
+{
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size, ImVec2(x-0.1, y-0.1), color1, str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size, ImVec2(x+0.1, y+0.1), color1, str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size, ImVec2(x, y), color, str);
+}
+void 绘制字体描边(float size,int x, int y, ImVec4 color, const char* str)
+{
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size,ImVec2(x + 1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 1.0f)), str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size,ImVec2(x - 0.1, y), ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 1.0f)), str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size,ImVec2(x, y + 1), ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 1.0f)), str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size,ImVec2(x, y - 1), ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 1.0f)), str);
+    ImGui::GetBackgroundDrawList()->AddText(NULL, size,ImVec2(x, y), ImGui::ColorConvertFloat4ToU32(color), str);
+}
+void 自瞄开关()
+{
+    ImGui::Begin("自瞄开关", &DrawIo[20],  ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiItemFlags_NoNav);
+    {
+        ImGui::SetWindowPos(
+        {
+            NumIo[14],NumIo[15]
+        }
+        , ImGuiCond_Once);//开始坐标位置
+        auto Pos1 = ImGui::GetWindowPos();
+        NumIo[14] = Pos1.x; NumIo[15] = Pos1.y;
+		
+        DrawLogo(
+        {
+            NumIo[14] + 50, NumIo[15] + 50
+        }	
+        , 85, 悬浮自瞄开关.DS);				
+        if (ImGui::IsItemActive())
+        {
+            if (!IsDown1)
+            {
+                IsDown1 = true;
+                ImagePos = ImGui::GetWindowPos();
+            }
+        }
+        else
+        if (IsDown1)
+        {
+            IsDown1 = false;
+            if(ImagePos.x == ImGui::GetWindowPos().x && ImagePos.y == ImGui::GetWindowPos().y)
+            {
+                if(!DrawIo[20])
+                {
+                    DrawIo[20] = true;
+                   // 悬浮自瞄开关 = ImAgeHeadFile(自瞄开, sizeof(自瞄开));
+					LoadTextureFromMemory((const void *)&自瞄开, sizeof(自瞄开), &悬浮自瞄开关); 
+                }
+                else
+                {
+                    DrawIo[20] = false;
+                   // 悬浮自瞄开关 = ImAgeHeadFile(自瞄关, sizeof(自瞄关));
+					LoadTextureFromMemory((const void *)&自瞄关, sizeof(自瞄关), &悬浮自瞄开关); 
+                }
+            }
+        }
+    }
+    ImGui::SetWindowSize("自瞄开关",
+    {
+        200.0f, 200.0f
+    }
+    );
+}
+void Draw360Alert(ImDrawList* Draw, Vector2A Obj, float camera, ImColor color, float Radius, float distance)
+{
+    ImVec2 screen_center = { (float)displayInfo.width / 2, (float)displayInfo.height / 2 };
+    
+    // Вычисляем угол
+    float angle = atan2f(screen_center.y - Obj.Y, screen_center.x - Obj.X);
+    if (camera < 0) angle += M_PI; 
+
+    // Центр стрелки на круге
+    ImVec2 arrow_center = {
+        screen_center.x + Radius * cosf(angle + M_PI),
+        screen_center.y + Radius * sinf(angle + M_PI)
+    };
+
+    // УВЕЛИЧИМ стрелку, чтобы текст влез внутрь
+    // Было: {-12, -7}, Стало: {-22, -14} (примерно в 2 раза шире и длиннее)
+    ImVec2 p1 = { -24.0f, -14.0f }; // Левый угол базы
+    ImVec2 p2 = { 0.0f, 0.0f };     // Носик
+    ImVec2 p3 = { -24.0f, 14.0f };  // Правый угол базы
+    ImVec2 p4 = { -18.0f, 0.0f };   // Вырез сзади (чтобы стрелка была красивой)
+
+    auto RotatePoint = [&](ImVec2 p) -> ImVec2 {
+        float s = sinf(angle + M_PI);
+        float c = cosf(angle + M_PI);
+        return ImVec2(
+            arrow_center.x + (p.x * c - p.y * s),
+            arrow_center.y + (p.x * s + p.y * c)
+        );
+    };
+
+    ImVec2 v1 = RotatePoint(p1);
+    ImVec2 v2 = RotatePoint(p2);
+    ImVec2 v3 = RotatePoint(p3);
+    ImVec2 v4 = RotatePoint(p4);
+
+    // Рисуем стрелку
+    Draw->AddTriangleFilled(v1, v2, v4, color);
+    Draw->AddTriangleFilled(v3, v2, v4, color);
+    Draw->AddTriangle(v1, v2, v3, ImColor(0, 0, 0, 255), 1.5f); // Черная обводка
+
+    // --- ТЕКСТ ДИСТАНЦИИ ---
+    char dist_txt[32];
+    sprintf(dist_txt, "%.0f", distance); // Просто цифра, без "m" (чтобы влезла)
+    
+    // Размер текста
+    auto size = ImGui::CalcTextSize(dist_txt);
+    
+    // ВАЖНО: Вычисляем позицию текста
+    // Берем точку p4 (это середина "широкой части" стрелки)
+    // И поворачиваем её так же, как стрелку
+    ImVec2 text_base_pos = RotatePoint({ -20.0f, 0.0f }); 
+
+    // Центрируем текст относительно этой точки
+    ImVec2 final_text_pos = {
+        text_base_pos.x - size.x / 2,
+        text_base_pos.y - size.y / 2
+    };
+
+    // Поворачивать сам текст сложно (ImGui этого не любит), поэтому
+    // рисуем его просто горизонтально. На широкой стрелке это выглядит нормально.
+    // Цвет текста делаем белым или черным, чтобы читался на фоне стрелки
+    Draw->AddText(NULL, 16.0f, final_text_pos, ImColor(255, 255, 255, 255), dist_txt);
+}
+#include <chrono>
+
+
+void DrawPlayer(ImDrawList *Draw)
+{   
+    
+    float top,right,left,bottom,x1,top1;
+    ImColor 颜色1;
+    px = displayInfo.width/2;
+    py = displayInfo.height/2;
+  //  sprintf(extra, "帧率 %.1f FPS", ImGui::GetIO().Framerate);
+    绘制字体描边(40, px/3, py/4, 红色, extra);
+    
+    //if(初始化 != 1)
+    //{
+    //return;
+    //}
+    // ImColor 颜色 = 随机颜色();
+    
+     if (DrawIo[27])
+        Draw->AddCircle(
+        {
+            px, py
+        }
+        , NumIo[3],黄色,0,2.0f);
+        //瞄准射线
+        if (DrawIo[24] && Gmin !=-1 && ToReticleDistance <= NumIo[3])
+        {
+            Draw->AddLine(
+            {
+                px , py
+            }
+            ,
+            {
+                瞄准x, 瞄准y
+            }
+            , 黄色,
+            {
+                1.0
+            }
+            );
+        }
+    
+    if(DrawIo[26])
+    {
+        自瞄开关();
+    }
+    
+    
+    
+    uintptr_t g_world_ptr = driver->read<uintptr_t>(libbase + 0xe840148);
+    uintptr_t uworld_ptr  = driver->read<uintptr_t>(g_world_ptr + 0x810);
+    Uworld = driver->read<uintptr_t>(uworld_ptr + 0x78);
+
+    uintptr_t matrix_ptr = driver->read<uintptr_t>(libbase + 0xe81a270);
+    Matrix = driver->read<uintptr_t>(matrix_ptr + 0xC0) + 0x9D0;
+    
+    Uleve = driver->read<uintptr_t>(Uworld + 0x30);// Uleve
+    
+
+
+
+    // -----------------------------------------------------------------------
+    // [FIX] АВТО-ПЕРЕБОР ОФФСЕТОВ (РОТАЦИЯ КЛЮЧЕЙ)
+    // -----------------------------------------------------------------------
+    // Список возможных мест, где игра прячет массив игроков.
+    // 0x448, 0x488 - твои старые. 
+    // 0x490 - новый из дампа SDK. 
+    // 0x468, 0x470 - указатели рядом (CurrentLevel/GameInstance).
+    int offset_candidates[] = { 0x448, 0x488, 0x490, 0x468, 0x470 };
+    
+    uintptr_t chlen = 0;
+    countddr = 0; // Сбрасываем перед поиском
+
+    // Цикл проверяет каждый адрес по очереди
+    for (int offset : offset_candidates) {
+        // Пробуем расшифровать
+        uintptr_t temp_chlen = DecryptActorsArray(Uleve, 0xA0, offset);
+        
+        if (temp_chlen != 0) {
+            // Если расшифровка прошла успешно, проверяем содержимое
+            uintptr_t temp_Array = driver->read<uintptr_t>(temp_chlen);
+            
+            // Если адрес массива выглядит как мусор (слишком маленький или огромный) - пропускаем
+            if (temp_Array < 0x10000000 || temp_Array >= 0x10000000000) continue;
+
+            // Читаем количество игроков
+            int temp_Count = driver->read<int>(temp_chlen + 0x8);
+            
+            // ГЛАВНАЯ ПРОВЕРКА: Если игроков от 1 до 2000 - это ОНО!
+            if (temp_Count > 0 && temp_Count < 2000) {
+                chlen = temp_chlen;
+                Arrayaddr = temp_Array;
+                countddr = temp_Count;
+                break; // Нашли рабочий оффсет, выходим из цикла
+            }
+        }
+    }
+
+    // Если после всех попыток chlen так и остался 0 или игроков нет - выходим
+    if (chlen == 0 || countddr <= 0) {
+        return;
+    }
+    // -----------------------------------------------------------------------
+    
+    uintptr_t addr = driver->read<uintptr_t>(libbase + 0xe840148);
+addr = driver->read<uintptr_t>(addr + 0x810);
+addr = driver->read<uintptr_t>(addr + 0x78);
+addr = driver->read<uintptr_t>(addr + 0x38);
+addr = driver->read<uintptr_t>(addr + 0x78);
+addr = driver->read<uintptr_t>(addr + 0x30);
+oneself = driver->read<uintptr_t>(addr + 0x28e0);
+
+
+float MyRenderTime = 0.0f;
+    uintptr_t MyMesh = driver->read<uintptr_t>(oneself + 0x510);
+    if (MyMesh) {
+        MyRenderTime = driver->read<float>(MyMesh + 0x490);
+    }
+
+    Myteam = driver->read<int>(oneself + 0x998);// 自身队伍编号
+    fov = driver->read<float>(driver->read<uintptr_t>(driver->read<uintptr_t>(oneself + 0x49e0) + 0x548) + 0x560);// 自身FOV
+Firing = driver->read<bool>(oneself + 0x1788); 
+
+// 2. Прицеливание
+// [Offset: 0x3df0] bIsOpenWeaponSight (bool)
+Aiming = driver->read<bool>(oneself + 0x10e1); 
+
+// 3. Состояние (Pose)
+// [Offset: 0x1798] PoseState
+自身动作 = driver->read<int>(oneself + 0x4b0); 
+
+
+//uintptr_t MyWeapon = driver->read<uintptr_t>(driver->read<uintptr_t>(oneself + 0x2588) +0x5c8);
+
+
+// 1. Получаем WeaponManager (0x2588)
+uintptr_t WeaponMgr1 = driver->read<uintptr_t>(oneself + 0x2588);
+
+// 2. Получаем текущее оружие (0x5c8)
+uintptr_t CurrWep1 = driver->read<uintptr_t>(WeaponMgr1 + 0x5c8);
+
+if (CurrWep1) {
+    // ID оружия (scwq) - проходим через структуру атрибутов (0x7e0 -> 0x1e0)
+    // Это гораздо надежнее старого 0x1268
+    MyWeapon = driver->read<int>(driver->read<uintptr_t>(CurrWep1 + 0x7e0) + 0x1e0);
+
+}
+
+    memset(matrix, 0, 16);
+    driver->read(Matrix, matrix, 16 * 4);
+    
+    PlayerCount = 0;
+    RobotCount = 0;
+    AimCount = 0;
+    
+     // --- ОПТИМИЗАЦИЯ 1: Читаем свои координаты ОДИН раз за кадр ---
+    
+        Vector3A Z;
+    // Читаем Z сразу перед циклом. Ты не телепортируешься пока рисуешь врагов.
+    driver->read(driver->read<uintptr_t>(oneself + 0x208) + 0x1c8, &Z, sizeof(Z));
+
+
+// Перед циклом
+
+    // 5. Цикл
+    // Используем safeCount, а не оригинальный (возможно глючный) countddr
+    for (int i = 0; i < countddr; i++)
+    {
+         Objaddr = driver->read<uintptr_t>(Arrayaddr + 0x8 * i);
+        
+        if (Objaddr == 0 || Objaddr == oneself) continue; // Пропускаем себя сразу
+        
+        uintptr_t object = driver->read<uintptr_t>(Objaddr + 0x208);
+            if (object <= 0xffff || object == 0 || object <= 0x10000000 || object % 4 != 0 || object >= 0x10000000000) {
+                continue;
+            }
+        
+        
+        Vector3A D;
+        driver->read(driver->read<uintptr_t>(Objaddr + 0x208 ) + 0x1c8, &D, sizeof(D));// 对象坐标
+                
+                
+                camera = matrix[3] * D.X + matrix[7] * D.Y + matrix[11] * D.Z + matrix[15];
+        r_x =
+        px + (matrix[0] * D.X + matrix[4] * D.Y + matrix[8] * D.Z +
+        matrix[12]) / camera * px;
+        r_y =
+        py - (matrix[1] * D.X + matrix[5] * D.Y + matrix[9] * (D.Z - 5) +
+        matrix[13]) / camera * py;
+        r_w =
+        py - (matrix[1] * D.X + matrix[5] * D.Y + matrix[9] * (D.Z + 205) +
+        matrix[13]) / camera * py;
+                
+        float x = r_x - (r_y - r_w) / 4;
+        float y = r_y;
+        float w = (r_y - r_w) / 2;
+        
+           float dx = D.X - Z.X;
+float dy = D.Y - Z.Y;
+float dz = D.Z - Z.Z;
+float Distance = std::sqrt(dx * dx + dy * dy + dz * dz) * 0.01f;
+           
+        
+    if (Distance > 600 ) continue; // Экономим ~20 чтений
+        
+        
+        
+        
+        
+        int ClassID = driver->read<uintptr_t>(Objaddr + 0x18);	
+			char ClassName[32] = "";
+			long int FNameEntry = driver->read<uintptr_t>(driver->read<uintptr_t>(Gname + (ClassID / 0x4000) * 0x8) + (ClassID % 0x4000) * 0x8);	// 序
+			driver->read(FNameEntry + 0xC, ClassName, 32);
+
+              // ----- КОНЕЦ БЛОКА ОПТИМИЗАЦИИ ВЫЧИСЛЕНИЯ ДИСТАНЦИИ 
+        
+         
+          
+            if (driver->read<float>(Objaddr + 0x2ae8) == 479.5)
+        {
+            
+
+            x1 = x+w/2;
+            left = (x + w / 2) - w / 2.6f;
+            right = x + w / 1.12f;
+
+
+            int TeamID = driver->read<int>(Objaddr + 0x998);
+float CurrentHP = driver->read<float>(Objaddr + 0xe28);
+float MaxHP = driver->read<float>(Objaddr + 0xe2c);
+
+float Health = 100.0f; // По умолчанию полное HP
+
+if (MaxHP > 0.0f && std::isfinite(CurrentHP) && std::isfinite(MaxHP)) {
+    Health = (CurrentHP / MaxHP) * 100.0f;
+    Health = std::max(0.0f, std::min(Health, 100.0f));
+} else if (std::isfinite(CurrentHP) && CurrentHP >= 0.0f && CurrentHP <= 100.0f) {
+    Health = CurrentHP; // Если MaxHP некорректный, но CurrentHP выглядит нормально
+}            
+            
+        
+
+bool isDead = driver->read<bool>(Objaddr + 0xe44);
+
+// Если мертв (true/1), пропускаем
+if (isDead) {
+    continue;
+}
+
+    bool bsAi = driver->read<bool>(Objaddr + 0xa49); 
+            
+            // 2. Присваиваем значение переменной isBot (0 или 1)
+            int isBot = 0; // По умолчанию игрок
+            
+            if (bsAi)
+            {
+                isBot = 1; // Это бот
+            }
+            else 
+            {
+                isBot = 0; // Это игрок
+            }
+            
+            if (DrawIo[29] && isBot == 1) {
+
+                continue; 
+            }
+            
+int State = driver->read<unsigned char>(Objaddr + 0xfb8); // [Offset: 0x1798] PoseState
+            
+
+
+
+
+           Vector3A Movement;
+driver->read(driver->read<uint64_t>(Objaddr + 0x208) + 0x2C0, &Movement, sizeof(Movement));
+
+
+
+            
+            if (State == 1048592 || State == 1048576 || State == 262152)
+            {
+                continue;
+            }
+            
+            if (Myteam == TeamID)
+            {
+                continue;
+            }
+// 1. Получаем WeaponManager (0x2588)
+uintptr_t WeaponMgr = driver->read<uintptr_t>(Objaddr + 0x2588);
+
+// 2. Получаем текущее оружие (0x5c8)
+uintptr_t CurrWep = driver->read<uintptr_t>(WeaponMgr + 0x5c8);
+
+if (CurrWep) {
+    // ID оружия (scwq) - проходим через структуру атрибутов (0x7e0 -> 0x1e0)
+    // Это гораздо надежнее старого 0x1268
+    scwq = driver->read<int>(driver->read<uintptr_t>(CurrWep + 0x7e0) + 0x1e0);
+
+    // Текущие патроны (dqzd) - находятся по оффсету 0xfb8 внутри объекта оружия
+    dqzd = driver->read<int>(CurrWep + 0xfb8);
+
+    // Максимальные патроны (zdmax) - находятся по оффсету 0xfd0 внутри объекта оружия
+    zdmax = driver->read<int>(CurrWep + 0xfd0);
+}
+            
+            
+      //      location = driver->read<int>(Objaddr + 0x2f80);
+            getUTF8(PlayerUID, driver->read<uintptr_t>(Objaddr + 0x988));
+            
+            
+            getUTF8(PlayerName, driver->read<uintptr_t>(Objaddr + 0x960));
+            // 阵列偏移
+            Mesh = driver->read<uintptr_t>(Objaddr + 0x510);
+bool isVisible = false; 
+ImColor CurrentDrawColor = ImColor(255, 255, 0, 255); // Желтый по умолчанию (если Mesh не прогружен)
+
+if (Mesh > 0 && MyRenderTime > 1.0f) {
+    float rTime = driver->read<float>(Mesh + 0x490);
+    float diff = MyRenderTime - rTime;
+    
+    if (rTime > 0.1f) {
+        if (diff < 0.06f && diff > -0.06f) {
+            isVisible = true; 
+        }
+    }
+}
+
+// ПРИМЕНЕНИЕ ТВОИХ ЦВЕТОВ:
+if (isBot == 1) {
+    // БОТЫ всегда белые
+    CurrentDrawColor = ImColor(255, 255, 255, 255); 
+} else {
+    // ИГРОКИ: Зеленый (виден) / Красный (за стеной)
+    if (isVisible) {
+        CurrentDrawColor = ImColor(0, 255, 0, 255); // Зеленый
+    } else {
+        CurrentDrawColor = ImColor(255, 0, 0, 255); // Красный
+    }
+}
+
+颜色1 = CurrentDrawColor; // Теперь боксы подхватят этот цвет
+            
+            // 骨骼阵列
+            human = Mesh + 0x210;//+骨骼矩阵
+            // 骨骼指针
+            Bone = driver->read<uintptr_t>(Mesh + 0x998) + 0x30;
+            // 计算骨节
+            int BoneCount = driver->read<uintptr_t>(Mesh + 0x988+8);
+            if (Bone <= 0xffff) {
+             continue;
+            }
+auto it = boneCache.find(BoneCount);
+if (it == boneCache.end()) {
+    // Дефолт для неизвестных моделей
+    it = boneCache.find(65);
+}
+
+const BoneSet& bones = it->second;
+int 头部 = bones.头部;
+int 胸部 = bones.胸部;
+int 盆骨 = bones.盆骨;
+int 左肩膀 = bones.左肩膀;
+int 右肩膀 = bones.右肩膀;
+int 左手肘 = bones.左手肘;
+int 右手肘 = bones.右手肘;
+int 左手腕 = bones.左手腕;
+int 右手腕 = bones.右手腕;
+int 左大腿 = bones.左大腿;
+int 右大腿 = bones.右大腿;
+int 左膝盖 = bones.左膝盖;
+int 右膝盖 = bones.右膝盖;
+int 左脚腕 = bones.左脚腕;
+int 右脚腕 = bones.右脚腕;
+            FTransform meshtrans = getBone(human);
+            FMatrix c2wMatrix = TransformToMatrix(meshtrans);
+                 // 头部
+            FTransform headtrans = getBone(Bone + 头部 * 48);
+            FMatrix boneMatrix = TransformToMatrix(headtrans);
+            Vector3A relLocation = MarixToVector(MatrixMulti(boneMatrix, c2wMatrix));
+            relLocation.Z += 7; // 脖子长度
+            // ИСПРАВЛЕНО: Убран 3-й аргумент 'camera'
+            Vector2A Head = WorldToScreen2(relLocation, matrix);
+
+            // 胸部
+            FTransform chesttrans = getBone(Bone + 胸部 * 48);
+            FMatrix boneMatrix1 = TransformToMatrix(chesttrans);
+            Vector3A relLocation1 = MarixToVector(MatrixMulti(boneMatrix1, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Chest = WorldToScreen2(relLocation1, matrix);
+
+            // 盆骨
+            FTransform pelvistrans = getBone(Bone + 盆骨 * 48);
+            FMatrix boneMatrix2 = TransformToMatrix(pelvistrans);
+            Vector3A LrelLocation1 = MarixToVector(MatrixMulti(boneMatrix2, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Pelvis = WorldToScreen2(LrelLocation1, matrix);
+
+            // 左肩膀
+            FTransform lshtrans = getBone(Bone + 左肩膀 * 48);
+            FMatrix boneMatrix3 = TransformToMatrix(lshtrans);
+            Vector3A relLocation2 = MarixToVector(MatrixMulti(boneMatrix3, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Shoulder = WorldToScreen2(relLocation2, matrix);
+
+            // 右肩膀
+            FTransform rshtrans = getBone(Bone + 右肩膀 * 48);
+            FMatrix boneMatrix4 = TransformToMatrix(rshtrans);
+            Vector3A relLocation3 = MarixToVector(MatrixMulti(boneMatrix4, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Shoulder = WorldToScreen2(relLocation3, matrix);
+
+            // 左手肘
+            FTransform lelbtrans = getBone(Bone + 左手肘 * 48);
+            FMatrix boneMatrix5 = TransformToMatrix(lelbtrans);
+            Vector3A relLocation4 = MarixToVector(MatrixMulti(boneMatrix5, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Elbow = WorldToScreen2(relLocation4, matrix);
+
+            // 右手肘
+            FTransform relbtrans = getBone(Bone + 右手肘 * 48);
+            FMatrix boneMatrix6 = TransformToMatrix(relbtrans);
+            Vector3A relLocation5 = MarixToVector(MatrixMulti(boneMatrix6, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Elbow = WorldToScreen2(relLocation5, matrix);
+
+            // 左手腕
+            FTransform lwtrans = getBone(Bone + 左手腕 * 48);
+            FMatrix boneMatrix7 = TransformToMatrix(lwtrans);
+            Vector3A relLocation6 = MarixToVector(MatrixMulti(boneMatrix7, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Wrist = WorldToScreen2(relLocation6, matrix);
+
+            // 右手腕
+            FTransform rwtrans = getBone(Bone + 右手腕 * 48);
+            FMatrix boneMatrix8 = TransformToMatrix(rwtrans);
+            Vector3A relLocation7 = MarixToVector(MatrixMulti(boneMatrix8, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Wrist = WorldToScreen2(relLocation7, matrix);
+
+            // 左大腿
+            FTransform Llshtrans = getBone(Bone + 左大腿 * 48);
+            FMatrix boneMatrix9 = TransformToMatrix(Llshtrans);
+            Vector3A LrelLocation2 = MarixToVector(MatrixMulti(boneMatrix9, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Thigh = WorldToScreen2(LrelLocation2, matrix);
+
+            // 右大腿
+            FTransform Lrshtrans = getBone(Bone + 右大腿 * 48);
+            FMatrix boneMatrix10 = TransformToMatrix(Lrshtrans);
+            Vector3A LrelLocation3 = MarixToVector(MatrixMulti(boneMatrix10, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Thigh = WorldToScreen2(LrelLocation3, matrix);
+
+            // 左膝盖
+            FTransform Llelbtrans = getBone(Bone + 左膝盖 * 48);
+            FMatrix boneMatrix11 = TransformToMatrix(Llelbtrans);
+            Vector3A LrelLocation4 = MarixToVector(MatrixMulti(boneMatrix11, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Knee = WorldToScreen2(LrelLocation4, matrix);
+
+            // 右膝盖
+            FTransform Lrelbtrans = getBone(Bone + 右膝盖 * 48);
+            FMatrix boneMatrix12 = TransformToMatrix(Lrelbtrans);
+            Vector3A LrelLocation5 = MarixToVector(MatrixMulti(boneMatrix12, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Knee = WorldToScreen2(LrelLocation5, matrix);
+
+            // 左脚腕
+            FTransform Llwtrans = getBone(Bone + 左脚腕 * 48);
+            FMatrix boneMatrix13 = TransformToMatrix(Llwtrans);
+            Vector3A LrelLocation6 = MarixToVector(MatrixMulti(boneMatrix13, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Left_Ankle = WorldToScreen2(LrelLocation6, matrix);
+
+            // 右脚腕
+            FTransform Lrwtrans = getBone(Bone + 右脚腕 * 48);
+            FMatrix boneMatrix14 = TransformToMatrix(Lrwtrans);
+            Vector3A LrelLocation7 = MarixToVector(MatrixMulti(boneMatrix14, c2wMatrix));
+            // ИСПРАВЛЕНО:
+            Vector2A Right_Ankle = WorldToScreen2(LrelLocation7, matrix);
+            // Max
+            FTransform Maxs = getBone(Bone + 6 * 48);
+            FMatrix boneMatrix15 = TransformToMatrix(Maxs);
+            Vector3A Max = MarixToVector(MatrixMulti(boneMatrix15, c2wMatrix));
+            // Min
+            FTransform Mins = getBone(Bone + 58 * 48);
+            FMatrix boneMatrix16 = TransformToMatrix(Mins);
+            Vector3A Min = MarixToVector(MatrixMulti(boneMatrix16, c2wMatrix));;
+
+
+            
+            if (LrelLocation6.Z < LrelLocation7.Z)
+            {
+                LrelLocation7.Z = LrelLocation6.Z;
+            }
+            
+
+            
+            top1 = Pelvis.Y - Head.Y;
+            top = Pelvis.Y - top1 - w / 5;
+            
+            if (Left_Ankle.Y < Right_Ankle.Y)
+            {
+                bottom = Right_Ankle.Y + w / 10;
+            }
+            else
+            {
+                bottom = Left_Ankle.Y  + w / 10;
+            }
+ if (w>0)
+            {
+   float PicunF6;
+if (Aiming == 1 || Aiming == 1)
+PicunF6 = NumIo[21];
+else
+PicunF6 = NumIo[19];
+
+        if (DrawIo[20]) {
+            float PicunF6 = (Aiming == 1) ? NumIo[21] : NumIo[19];
+            
+            // Проверка дистанции и игнорирование ботов/команды
+            if (Distance <= PicunF6 && ((DrawIo[23] && isBot != 1 && TeamID != -1) || !DrawIo[23])) {
+                
+                // Проверка на нокнутых (DrawIo[22])
+                if ((DrawIo[22] && Health > 0) || !DrawIo[22]) {
+
+                    // -----------------------------------------------------------------
+                    // [AIM VISIBLE] ДОБАВИТЬ ЭТОТ БЛОК
+                    // -----------------------------------------------------------------
+                    // DrawIo[25] - это номер переключателя в меню для "Aim Visible Only"
+                    // Если галочка включена, а враг НЕ виден (!isVisible) -> пропускаем его
+                    if (!isVisible) {
+                         // Просто ничего не делаем, цикл пойдет дальше, аим не запишет этого врага
+                    } 
+                    else 
+                    {
+                        // Если проверки нет ИЛИ враг виден -> добавляем в аим
+                        strcpy(Aim[AimCount].Name, PlayerUID);
+                        Aim[AimCount].WodDistance = Distance;
+                        Aim[AimCount].AimMovement = Movement;
+                        Aim[AimCount].isBot = (isBot == 1);
+                        Aim[AimCount].health = Health;
+                                        
+                        // Выбор кости для аима (Голова/Грудь/Таз)
+                        if (NumIo[8] == 1.0) {
+                            Aim[AimCount].ObjAim = relLocation; // Голова
+                            Aim[AimCount].ScreenDistance = sqrt(pow(px - Head.X, 2) + pow(py - Head.Y, 2));
+                        } else if (NumIo[8] == 2.0 || NumIo[8] == 0.0) {
+                            Aim[AimCount].ObjAim = relLocation1; // Грудь
+                            Aim[AimCount].ScreenDistance = sqrt(pow(px - Chest.X, 2) + pow(py - Chest.Y, 2));
+                        } else if (NumIo[8] == 3.0) {
+                            Aim[AimCount].ObjAim = LrelLocation1; // Таз
+                            Aim[AimCount].ScreenDistance = sqrt(pow(px - Pelvis.X, 2) + pow(py - Pelvis.Y, 2));
+                        } else {
+                            Aim[AimCount].ObjAim = relLocation1;
+                            Aim[AimCount].ScreenDistance = sqrt(pow(px - Chest.X, 2) + pow(py - Chest.Y, 2));
+                        }
+                        
+                        AimCount++;
+                    }
+                    // -----------------------------------------------------------------
+                }
+            }
+        }
+            
+}
+            
+            
+
+            if (DrawIo[8]) 
+            {
+                // 1. Проверяем, находится ли враг на экране
+                bool isOnScreen = false;
+                
+                // camera > 0 означает, что враг перед нами (не за спиной)
+                if (camera > 0 && 
+                    Head.X >= 0 && Head.X <= displayInfo.width && // В пределах ширины
+                    Head.Y >= 0 && Head.Y <= displayInfo.height)  // В пределах высоты
+                {
+                    isOnScreen = true;
+                }
+
+                // 2. Если враг НЕ на экране (ушел за край или стоит сзади) -> Рисуем стрелку
+                if (!isOnScreen)
+                {
+                    // Радиус круга, на котором бегают стрелки (подберите под свой экран)
+                    // Обычно 300-400 для телефонов нормально
+                    float Radius = 350.0f; 
+                    
+                    // Вызываем функцию отрисовки
+                    Draw360Alert(Draw, Head, camera, 颜色1, Radius, Distance);
+                }
+            }
+            // --------------------------------------------------------
+            
+            if(w>0)
+            {
+                
+                // 方框
+if (DrawIo[1]){
+    if (NumIos[13] == 0)
+    {
+        // AddRect использует 颜色1, которая теперь Белая/Зеленая/Красная
+        Draw->AddRect({left, top}, {right, bottom}, 颜色1, 0, 0, 1.5f);
+    }
+    // ... остальная логика 3D боксов тоже должна использовать 颜色1
+}
+                
+    
+                
+                
+                
+if (DrawIo[2])
+{
+    // Теперь линия будет того же цвета, что и бокс (Белая/Зеленая/Красная)
+    Draw->AddLine({px , 0}, {Head.X, top - 50}, 颜色1, 1.0f);
+}
+if (DrawIo[3] && Distance < NumIo[35]) {
+    ImColor skeleCol = isBot ? 人机骨骼颜色 : 骨骼颜色;
+    float thickness = NumIo[32];
+
+    // Хелпер для безопасного рисования линии
+    auto SafeLine = [&](Vector2A p1, Vector2A p2) {
+        // Если координаты слишком огромные или нулевые - не рисуем
+        if (p1.X <= 0 || p1.Y <= 0 || p2.X <= 0 || p2.Y <= 0) return;
+        if (p1.X > displayInfo.width || p1.Y > displayInfo.height && p2.X > displayInfo.width || p2.Y > displayInfo.height) return;
+        
+        Draw->AddLine({p1.X, p1.Y}, {p2.X, p2.Y}, skeleCol, thickness);
+    };
+
+    // Рисуем голову кругом
+    if (Head.X > 0 && Head.Y > 0) 
+        Draw->AddCircle({Head.X, Head.Y}, w / 14, skeleCol, 0);
+
+    // Соединяем кости через SafeLine
+    SafeLine(Head, Chest);
+    SafeLine(Chest, Pelvis);
+    SafeLine(Chest, Left_Shoulder);
+    SafeLine(Chest, Right_Shoulder);
+    SafeLine(Left_Shoulder, Left_Elbow);
+    SafeLine(Right_Shoulder, Right_Elbow);
+    SafeLine(Left_Elbow, Left_Wrist);
+    SafeLine(Right_Elbow, Right_Wrist);
+    SafeLine(Pelvis, Left_Thigh);
+    SafeLine(Pelvis, Right_Thigh);
+    SafeLine(Left_Thigh, Left_Knee);
+    SafeLine(Right_Thigh, Right_Knee);
+    SafeLine(Left_Knee, Left_Ankle);
+    SafeLine(Right_Knee, Right_Ankle);
+}
+                         // Вычисляем реальную ширину текущего бокса
+float BoxWidth = right - left; 
+float BoxCenter = left + BoxWidth / 2.0f; // Идеальный центр бокса
+                                  
+
+if (DrawIo[4])
+{
+    char nameBuf[64];
+    if(isBot) strcpy(nameBuf, "Bot");
+    else snprintf(nameBuf, sizeof(nameBuf), "%d | %s", TeamID, PlayerName);
+
+    // Размер шрифта. 
+    // Если хочешь, чтобы шрифт уменьшался вместе с боксом (был "статичным" к боксу),
+    // раскомментируй строку ниже, но это может сделать текст нечитаемым вдалеке:
+    // float dynamicSize = std::max(10.0f, std::min(18.0f, BoxWidth / 3.0f)); 
+    
+    float fontSize = 16.0f; // Оставляем читаемый размер
+
+    ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, nameBuf);
+    
+    // Центрируем: ЦентрБокса - ПоловинаТекста
+    ImVec2 textPos = { BoxCenter - (textSize.x / 2.0f), top - 25.0f };
+
+    Draw->AddText(NULL, fontSize, {textPos.x + 1, textPos.y + 1}, ImColor(0, 0, 0, 255), nameBuf);
+    Draw->AddText(NULL, fontSize, textPos, ImColor(255, 255, 255, 255), nameBuf);
+}
+
+
+// Дистанция (Distance)
+if (DrawIo[5]) {
+    char distBuf[32];
+    sprintf(distBuf, "[ %dm ]", (int)Distance); // Формат вида [ 100m ]
+
+    float fontSize = 16.0f; // Такой же размер, как у оружия
+    ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, distBuf);
+
+    // 1. Центрируем по X (BoxCenter - половина ширины текста)
+    float textX = BoxCenter - (textSize.x / 2.0f);
+
+    // 2. Позиция по Y (Высота)
+    // Важно: Оружие обычно рисуется сразу под ногами (bottom + 5).
+    // Чтобы дистанция не наезжала на оружие, рисуем её чуть ниже (bottom + 18).
+    // Если оружие выключено, можно уменьшить это число.
+    float textY = bottom + 18.0f; 
+
+    // 3. Тень (для читаемости)
+    Draw->AddText(NULL, fontSize, {textX + 1, textY + 1}, ImColor(0, 0, 0, 255), distBuf);
+    
+    // 4. Сам текст (Белый)
+    Draw->AddText(NULL, fontSize, {textX, textY}, ImColor(255, 255, 255, 255), distBuf);
+}
+
+if (DrawIo[13]) {
+    std::string s;
+    s += 状态(State);
+    Draw->AddText(NULL, 16, {x1 - 20, y+w+45}, 白色, s.c_str());
+}
+// Полоска здоровья (HP Bar)
+if (DrawIo[6]) {
+    // Валидация HP
+    if (!std::isfinite(Health) || Health < 0.0f) Health = 100.0f;
+    float curHp = std::max(0.0f, std::min(Health, 100.0f));
+
+    // --- НАСТРОЙКИ РАЗМЕРА ---
+    float MaxBarWidth = 80.0f; // Максимальная ширина (чтобы вблизи не была огромной)
+    float BarHeight = 4.0f;
+    float VerticalOffset = 10.0f + NumIo[34]; 
+
+    // 1. Вычисляем итоговую ширину полоски
+    // Если ширина бокса больше 100px, ограничиваем её до 100px. Иначе берем ширину бокса.
+    float CurrentBarWidth = (BoxWidth > MaxBarWidth) ? MaxBarWidth : BoxWidth;
+
+    // 2. Вычисляем координаты, чтобы полоска была СТРОГО ПО ЦЕНТРУ
+    // Отступаем половину ширины полоски влево и вправо от BoxCenter
+    float BarLeft = BoxCenter - (CurrentBarWidth / 2.0f);
+    float BarRight = BoxCenter + (CurrentBarWidth / 2.0f);
+    
+    float barTop = top - VerticalOffset;
+    float barBottom = barTop + BarHeight;
+
+    // 3. Вычисляем длину зеленой полоски (жизни)
+    float fillLength = (curHp / 100.0f) * CurrentBarWidth;
+
+    // Цвет
+    ImColor HPColor = curHp < 35 ? ImColor(255, 0, 0, 255) : 
+                      (curHp < 70 ? ImColor(255, 200, 0, 255) : ImColor(0, 255, 0, 255));
+
+    // РИСУЕМ
+
+    // Фон (Черная подложка)
+    Draw->AddRectFilled(
+        {BarLeft, barTop}, 
+        {BarRight, barBottom}, 
+        ImColor(0, 0, 0, 180)
+    );
+
+    // Сама жизнь
+    Draw->AddRectFilled(
+        {BarLeft, barTop}, 
+        {BarLeft + fillLength, barBottom}, 
+        HPColor
+    );
+
+    // Обводка
+    Draw->AddRect(
+        {BarLeft - 1, barTop - 1}, 
+        {BarRight + 1, barBottom + 1}, 
+        ImColor(0, 0, 0, 255), 
+        0.0f, 0, 1.0f
+    );
+}
+
+
+// Оружие (Weapon)
+if (DrawIo[11]) {
+    char textBuffer[64]; 
+    string wName = GetHol(scwq); // Твоя функция получения имени
+    
+    // Форматируем строку
+    if (dqzd > 0 || zdmax > 0)
+        snprintf(textBuffer, sizeof(textBuffer), "%s [%d]", wName.c_str(), (int)dqzd);
+    else
+        snprintf(textBuffer, sizeof(textBuffer), "%s", wName.c_str());
+
+    float fontSize = 17.0f; // Чуть меньше ника
+    ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, textBuffer);
+
+    // Центрируем под ногами (bottom + отступ)
+    ImVec2 textPos = { BoxCenter - (textSize.x / 2.0f), bottom + 5.0f };
+
+    Draw->AddText(NULL, fontSize, {textPos.x + 1, textPos.y + 1}, ImColor(0, 0, 0, 255), textBuffer);
+    Draw->AddText(NULL, fontSize, textPos, ImColor(255, 255, 0, 255), textBuffer);
+}
+
+// Внутри void DrawPlayer(ImDrawList *Draw)
+if (DrawIo[48]) {
+    // Используем значение из массива NumIo, которое меняет слайдер
+    float current_value = NumIo[49];
+    
+    // Если слайдер еще не трогали (он 0.0), ставим дефолт
+
+    // Пишем в память
+    driver->write<float>(libbase + 0x343C610, current_value);
+}
+
+
+
+
+
+
+
+            }
+            //w >0
+            人物总结:
+   if (isBot == 1 || TeamID == -1)
+    RobotCount++;
+else
+    PlayerCount++;
+        }
+        //特征
+        else{      
+        if (w >= 0 && Distance <= 300)
+{
+// ------------------ Общие вычисления ------------------
+
+
+// Фильтр по валидности координат и дистанции
+
+    // ------------------ DrawIo[14]: Проектайлы (Гранаты) ------------------
+    // Ставим этот блок первым. Если это граната, мы не хотим проверять её как лут.
+    if (DrawIo[14]) 
+    {
+        int gType = 0; // 1=Frag, 2=Burn, 3=Smoke
+        ImColor gCol;
+        const char* gLbl = "";
+
+        // Проверка имени класса
+        if (strstr(ClassName, "BP_Projectile_FragGrenade_C")) { gType=1; gLbl="GRENADE"; gCol=ImColor(255,135,0); }
+        else if (strstr(ClassName, "BP_Projectile_BurnGrenade_C")) { gType=2; gLbl="MOLOTOV"; gCol=ImColor(255,135,0); }
+        else if (strstr(ClassName, "BP_Projectile_SmokeBomb_C")) { gType=3; gLbl="SMOKE"; gCol=ImColor(0,255,0); }
+
+        if (gType > 0) 
+        {
+            char textBuffer[64];
+            snprintf(textBuffer, sizeof(textBuffer), "%s [%dm]", gLbl, (int)Distance);
+            
+            // Отрисовка текста (используем ваш стиль 绘制字体描边 вместо Draw->AddText)
+            绘制字体描边(15.0f, x - 25, y - 10, gCol, textBuffer);
+
+            if (gType == 1 || gType == 2) 
+            {
+               
+                if (Distance < 10) {
+                    // Получаем размеры экрана через ImGui для универсальности
+                    float screenW = ImGui::GetIO().DisplaySize.x;
+                    float screenH = ImGui::GetIO().DisplaySize.y;
+
+                }
+            } 
+            else 
+            {
+
+                ImGui::GetBackgroundDrawList()->AddCircle(ImVec2(x, y), 45.0f, ImColor(0, 255, 0), 12);
+            }
+
+            continue; 
+        }
+    }
+    if (DrawIo[15]) 
+    {
+        bool isVehicleFound = false;
+        for (const auto& veh : vehicles) 
+        {
+            // Проверяем совпадение ID в имени класса
+            if (strstr(ClassName, veh.id)) 
+            {
+                char textBuffer[64];
+                snprintf(textBuffer, sizeof(textBuffer), "%s [%dm]", veh.label, (int)Distance);
+                
+                // Отрисовка (используем единый стиль)
+                // x - 40 и y - 14 взяты из вашего примера для DrawIo[15]
+                绘制字体描边(10.0f, x - 40, y - 14, ImColor(veh.color), textBuffer);
+                
+                isVehicleFound = true;
+                break; // Прерываем цикл for, так как машину нашли
+            }
+        }
+        if (isVehicleFound) continue; // Прерываем основной цикл обработки объекта
+    }
+
+    // ------------------ DrawIo[10]: Сундуки (Smart Chests) ------------------
+    if (DrawIo[10]) 
+    {
+        const char* currentName = ClassName;
+        bool isClosedChest = strstr(currentName, "Box_Lua") != nullptr;
+        bool isDeadBox = strcmp(currentName, "PlayerDeadInventoryBox_C") == 0;
+        bool isOpenedChest = !isClosedChest && (
+            strcmp(currentName, "TreasureChestInventoryBox_C") == 0 || 
+            strcmp(currentName, "TreasureChestPickUpListWrapper_C") == 0
+        );
+
+        if (isClosedChest || isOpenedChest || isDeadBox) 
+        {
+            size_t coordHash = 17;
+            coordHash = coordHash * 31 + std::hash<long long>()((long long)(D.X * 100));
+            coordHash = coordHash * 31 + std::hash<long long>()((long long)(D.Y * 100));
+            coordHash = coordHash * 31 + std::hash<long long>()((long long)(D.Z * 100));
+
+            static std::unordered_map<size_t, bool> openedStates;
+            
+            if (isOpenedChest) openedStates[coordHash] = true;
+
+            if (!(isClosedChest && openedStates.count(coordHash))) 
+            {
+                char distBuf[32];
+                snprintf(distBuf, sizeof(distBuf), "%dm", (int)Distance);
+
+                if (isClosedChest) {
+                    绘制字体描边(15, x - 40, y - 14, ImColor(0, 255, 127), "Treasure box");
+                    绘制字体描边(15, x - 40, y + 14, ImColor(255, 255, 0), distBuf);
+                }
+                else if (isDeadBox) {
+                    绘制字体描边(15.5, x + 0, y - 9, ImColor(255, 255, 255), "(Opened)");
+                }
+            }
+        }
+    }
+                                      }
+                                                                  
+                                                                                             
+                                                                                                                                                   
+        }      
+        
+    }     
+
+        MaxPlayerCount = AimCount;
+
+    // --- ОТОБРАЖЕНИЕ СЧЕТЧИКА ---
+    
+    // Формируем строки
+    // ==================================================
+    // СТИЛЬНЫЙ СЧЕТЧИК ВРАГОВ (Top Bar)
+    // ==================================================
+    
+float barWidth = 300.0f;  // Ширина (увеличили, чтобы влезало)
+    float barHeight = 50.0f;
+    float topMargin = 40.0f;
+    float rounding = 8.0f;
+    
+    ImVec2 pMin = { px - barWidth/2, topMargin };
+    ImVec2 pMax = { px + barWidth/2, topMargin + barHeight };
+    
+    // Фон и обводка
+    Draw->AddRectFilled(pMin, pMax, ImColor(20, 20, 20, 220), rounding);
+    Draw->AddRect(pMin, pMax, ImColor(255, 255, 255, 60), rounding, 0, 1.0f);
+
+    // Текст
+    char strP[32], strB[32];
+    sprintf(strP, "ENEMY: %d", PlayerCount);
+    sprintf(strB, "BOT: %d", RobotCount);
+    
+    ImColor colP = PlayerCount > 0 ? ImColor(255, 60, 60, 255) : ImColor(180, 180, 180, 255);
+    ImColor colB = ImColor(120, 255, 120, 255);
+    
+    // Разделитель
+    Draw->AddLine({px, topMargin + 10}, {px, topMargin + barHeight - 10}, ImColor(255, 255, 255, 40), 1.0f);
+
+    auto font = ImGui::GetFont();
+    
+    // 1. Игроки (Слева)
+    float fontSizeP = 20.0f;
+    ImVec2 sizeP = font->CalcTextSizeA(fontSizeP, FLT_MAX, 0.0f, strP);
+    float leftCenter = px - (barWidth / 4);
+    Draw->AddText(font, fontSizeP, {leftCenter - sizeP.x/2, topMargin + (barHeight - sizeP.y)/2}, colP, strP);
+
+    // 2. Боты (Справа)
+    float fontSizeB = 18.0f;
+    ImVec2 sizeB = font->CalcTextSizeA(fontSizeB, FLT_MAX, 0.0f, strB);
+    float rightCenter = px + (barWidth / 4);
+    Draw->AddText(font, fontSizeB, {rightCenter - sizeB.x/2, topMargin + (barHeight - sizeB.y)/2}, colB, strB);
+    
+    // Треугольник WARNING
+    if (PlayerCount > 0) 
+    {
+        float blink = abs(sin(ImGui::GetTime() * 4.0f)); 
+        Draw->AddTriangleFilled({px - 6, pMax.y}, {px + 6, pMax.y}, {px, pMax.y + 6}, ImColor(1.0f, 0.2f, 0.2f, blink));
+    }
+
+
+    // Эти переменные (FText1/2) вроде не используются, можно удалить
+    // char FText1[100];
+    // char FText2[100];
+}

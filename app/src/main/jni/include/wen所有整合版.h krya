@@ -1,0 +1,243 @@
+#ifndef DRIVER_H
+#define DRIVER_H
+#include <sys/fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>      // Добавлено для mknod
+#include <sys/sysmacros.h> // Добавлено для makedev
+#include <stdio.h>
+#include <stdlib.h>        // Для system()
+#include <unistd.h>
+#include <string.h>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <dirent.h>
+#include <errno.h>
+
+// Временный путь для создания ноды (используем /dev, чтобы избежать noexec)
+#define TEMP_NODE_PATH "/dev/rw_driver_temp"
+
+class c_driver
+{
+private:
+    int fd;
+    pid_t pid;
+
+    // --- Структуры (ОРИГИНАЛЬНЫЕ) ---
+    typedef struct _COPY_MEMORY {
+        pid_t pid;
+        uintptr_t addr;
+        void *buffer;
+        size_t size;
+    } COPY_MEMORY;
+
+    typedef struct _MODULE_BASE {
+        pid_t pid;
+        char *name;       // Оставляем указатель как было!
+        uintptr_t base;
+    } MODULE_BASE;
+
+    typedef struct _HW_BP {
+        pid_t pid;
+        uintptr_t addr;
+        int type;      
+        size_t len;    
+    } HW_BP;
+
+
+public:
+    typedef struct _DEBUG_EVENT {
+        pid_t pid;
+        uintptr_t pc;       
+        uintptr_t sp;       
+        uintptr_t pstate;   
+        uintptr_t regs[31]; 
+        uintptr_t fault_addr; 
+    } DEBUG_EVENT;
+
+private:
+    enum OPERATIONS {
+        OP_READ_MEM = 0x801,
+        OP_WRITE_MEM = 0x802,
+        OP_MODULE_BASE = 0x803,
+        OP_SET_HW_BP = 0x807,
+        OP_DEL_HW_BP = 0x808,
+        OP_GET_DEBUG_EVENT = 0x809,
+    };
+
+    std::vector<int> get_all_tids(int target_pid) {
+        std::vector<int> tids;
+        char path[64];
+        sprintf(path, "/proc/%d/task", target_pid);
+        DIR* dir = opendir(path);
+        if (dir) {
+            struct dirent* entry;
+            while ((entry = readdir(dir)) != NULL) {
+                if (entry->d_name[0] == '.') continue;
+                tids.push_back(atoi(entry->d_name));
+            }
+            closedir(dir);
+        }
+        return tids;
+    }
+
+    // Функция поиска Major номера скрытого драйвера
+    bool find_driver_major(unsigned int& major) {
+        FILE* fp = fopen("/proc/devices", "r");
+        if (!fp) return false;
+        
+        char line[256];
+        while (fgets(line, sizeof(line), fp)) {
+            unsigned int temp_major;
+            char name[128] = {0};
+            // Ищем строку с номером, но БЕЗ имени (или с пустым именем)
+            int count = sscanf(line, "%u %s", &temp_major, name);
+            
+            // Если прочитан только номер (count == 1), значит имя пустое -> это наш драйвер
+            if (count == 1 && temp_major >= 200) { 
+                major = temp_major;
+                fclose(fp);
+                return true;
+            }
+        }
+        fclose(fp);
+        return false;
+    }
+
+public:
+    c_driver() : fd(-1), pid(0) {
+        unsigned int major = 0;
+        
+        // 1. Ищем Major номер
+        if (!find_driver_major(major)) {
+            printf("[-] Driver not found. Is it loaded?");
+            return;
+        }
+        
+        // 2. Создаем ноду вручную (Stealth connect)
+        dev_t devt = makedev(major, 0);
+        
+        unlink(TEMP_NODE_PATH); // Удаляем старую, если была
+        
+        if (mknod(TEMP_NODE_PATH, S_IFCHR | 0666, devt) == -1) {
+            printf("[-] mknod fail: %s", strerror(errno));
+            return;
+        }
+
+        // 3. Выставляем права и SELinux контекст (Android fix)
+        chmod(TEMP_NODE_PATH, 0666);
+        // Пытаемся починить "Permission denied" на Android
+        system("chcon u:object_r:device:s0 " TEMP_NODE_PATH " >/dev/null 2>&1");
+
+        // 4. Открываем
+        fd = open(TEMP_NODE_PATH, O_RDWR);
+        
+        // 5. Сразу удаляем файл (скрываем следы)
+        unlink(TEMP_NODE_PATH);
+
+        if (fd == -1) {
+            printf("[-] Failed to open driver: %s", strerror(errno));
+        } else {
+            printf("[+] Connected! Major: %u, FD: %d", major, fd);
+        }
+    }
+
+    ~c_driver() { if (fd > 0) close(fd); }
+
+    void init(pid_t pid) { this->pid = pid; }
+    pid_t get_pid() { return this->pid; }
+
+    bool read(uintptr_t addr, void *buffer, size_t size) {
+        if (fd <= 0) return false;
+        COPY_MEMORY cm = {this->pid, addr, buffer, size};
+        return ioctl(fd, OP_READ_MEM, &cm) == 0;
+    }
+
+    bool write(uintptr_t addr, void *buffer, size_t size) {
+        if (fd <= 0) return false;
+        COPY_MEMORY cm = {this->pid, addr, buffer, size};
+        return ioctl(fd, OP_WRITE_MEM, &cm) == 0;
+    }
+
+    template <typename T> T read(uintptr_t addr) {
+        T res; return read(addr, &res, sizeof(T)) ? res : T{};
+    }
+    
+    template <typename T> bool write(uintptr_t addr, T value) {
+        return write(addr, &value, sizeof(T));
+    }
+
+    uintptr_t get_module_base(const char *name) {
+        if (fd <= 0) return 0;
+        // Тут оставляем char* name как было у вас!
+        MODULE_BASE mb = {this->pid, (char*)name, 0}; 
+        if (ioctl(fd, OP_MODULE_BASE, &mb) != 0) return 0;
+        return mb.base;
+    }
+
+    // ==========================================
+    // RWPROCMEM33 STYLE BREAKPOINTS
+    // ==========================================
+
+    int set_hw_bp(uintptr_t addr, int type, int target_pid = -1) {
+        if (fd <= 0) return 0;
+        HW_BP bp;
+        bp.addr = addr;
+        bp.type = type;
+        bp.len = 4;
+
+        if (target_pid != -1) {
+            bp.pid = target_pid;
+            return ioctl(fd, OP_SET_HW_BP, &bp) == 0 ? 1 : 0;
+        } else {
+            std::vector<int> tids = get_all_tids(this->pid);
+            int success_count = 0;
+            for (int tid : tids) {
+                bp.pid = tid;
+                if (ioctl(fd, OP_SET_HW_BP, &bp) == 0) {
+                    success_count++;
+                }
+            }
+            return success_count;
+        }
+    }
+
+    int del_hw_bp(uintptr_t addr, int target_pid = -1) {
+        if (fd <= 0) return 0;
+        HW_BP bp;
+        bp.addr = addr;
+        bp.type = 0;
+        bp.len = 0;
+
+        if (target_pid != -1) {
+            bp.pid = target_pid;
+            return ioctl(fd, OP_DEL_HW_BP, &bp) == 0 ? 1 : 0;
+        } else {
+            std::vector<int> tids = get_all_tids(this->pid);
+            int count = 0;
+            for (int tid : tids) {
+                bp.pid = tid;
+                if (ioctl(fd, OP_DEL_HW_BP, &bp) == 0) count++;
+            }
+            return count;
+        }
+    }
+
+    bool get_debug_event(DEBUG_EVENT *out_event) {
+        if (fd <= 0) return false;
+        return ioctl(fd, OP_GET_DEBUG_EVENT, out_event) == 1;
+    }
+    
+    bool wait_for_debug_event(DEBUG_EVENT *out_event, int timeout_ms = 100) {
+        auto start = std::chrono::steady_clock::now();
+        while (true) {
+            if (get_debug_event(out_event)) return true;
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() > timeout_ms) return false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+};
+
+static c_driver *driver = new c_driver();
+
+#endif

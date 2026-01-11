@@ -1,0 +1,200 @@
+#include "Draw.h"
+#include "Font.h"
+#include "blemo.h" // Подключаем твой файл с массивом blem[]
+// Var
+EGLDisplay display = EGL_NO_DISPLAY;
+EGLConfig config;
+EGLSurface surface = EGL_NO_SURFACE;
+EGLContext context = EGL_NO_CONTEXT;
+
+ANativeWindow *native_window;
+//
+int native_window_screen_x = 0;
+int native_window_screen_y = 0;
+android::ANativeWindowCreator::DisplayInfo displayInfo{0};
+uint32_t orientation = 0;
+bool g_Initialized = false;
+
+
+bool initGUI_draw(uint32_t _screen_x, uint32_t _screen_y, bool log) {
+    // Инициализация библиотеки Vulkan (загрузка символов)
+    InitVulkan();
+    SetupVulkan();
+
+    // --- УДАЛЕНО: Создание окна через root-права ---
+    // ::native_window = android::ANativeWindowCreator::Create("AImGui", _screen_x, _screen_y, false);
+    
+    // --- ДОБАВЛЕНО: Проверка ---
+    if (::native_window == nullptr) {
+        // Ошибка: окно не было передано через JNI
+        return false;
+    }
+
+    // Настройка Surface для Vulkan с использованием существующего окна
+    SetupVulkanWindow(::native_window, (int) _screen_x, (int) _screen_y);
+
+    // Инициализация ImGui
+    if (!ImGui_init()) {
+        return false;
+    }
+
+    UploadFonts();
+    return true;
+}
+
+void screen_config() {
+    displayInfo = android::ANativeWindowCreator::GetDisplayInfo();
+    Touch::setOrientation(displayInfo.orientation);
+}
+void ImGuiMenustyle1()
+{  
+    
+  //  ImGui::StyleColorsBlack();//暗色
+    ImGui::StyleColorsDark();//白色
+	ImGuiStyle & style = ImGui::GetStyle();
+	/*
+    style.GrabRounding = 5.0f;
+	style.GrabMinSize = 35.0f;
+    style.FrameRounding = 5.0f;
+	style.ScrollbarSize = 55.0f;
+    style.FrameBorderSize = 0.5f;
+    style.WindowBorderSize = 0.0f;
+	style.ScrollbarRounding = 5.0f;
+    style.FramePadding = ImVec2(5, 5);
+    style.WindowTitleAlign = ImVec2(0.5, 0.5);
+    */
+ style.Colors[ImGuiCol_WindowBg] = ImVec4(0.5f, 0.5f, 0.5f, 0.8f); // 灰色半透明背景
+ style.Colors[ImGuiCol_WindowBg] = ImVec4(0.1f, 0.1f, 0.1f, 0.8f); // 亮黑色，透明度0.8
+style.Colors[ImGuiCol_Text] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // 白色字体
+style.Colors[ImGuiCol_Button] = ImVec4(0.0f, 1.0f, 0.1f, 1.0f); // 绿色，不透明
+style.Colors[ImGuiCol_CheckMark] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);//白色复选框
+style.Colors[ImGuiCol_ButtonActive] = ImVec4(1.0f, 0.4f, 0.7f, 0.9f); // 粉色，不透明
+    
+    
+    style.WindowBorderSize = 0.6;//框架描边宽度
+	style.WindowTitleAlign = ImVec2(0.5, 0.5);//标题居中
+    style.WindowRounding = 15;//窗口圆角
+	style.FrameRounding = 4;//滚动条圆角
+	style.GrabRounding = 6;//滑动条圆角
+	//style.FramePadding = ImVec2(8, 8);//标签栏长度
+	style.ScrollbarSize = 50; // 设置滚动条宽度
+	style.GrabMinSize = 40; // 设置滑块宽度
+	style.FrameBorderSize = 0.6; // 设置控件描边宽度
+}
+bool Android_LoadSystemFont()//调用系统字体
+{
+    char path[64] {0};
+    char *filename = nullptr;
+    const char *fontPath[] = {"/system/fonts", "/system/font", "/data/fonts"};
+    for (auto tmp:fontPath)
+    {
+        if (access(tmp, R_OK) == 0)
+        {
+            strcpy(path, tmp);
+            filename = path + strlen(tmp);
+            break;
+        }
+    }
+    if (!filename)
+    {
+        return false;
+    }
+    *filename++ = '/';
+    strcpy(filename, "NotoSansCJK-Regular.ttc");
+    if (access(path, R_OK) != 0)
+    {
+        strcpy(filename, "NotoSerifCJK-Regular.ttc");
+        if (access(path, R_OK) != 0)
+        {
+            return false;
+        }
+    }
+    ImGuiIO *Io = &ImGui::GetIO();
+    static ImVector<ImWchar>RanGes;
+    if (RanGes.empty())
+    {
+        ImFontGlyphRangesBuilder builder;
+        constexpr ImWchar Ranges[] {0x0020, 0x00FF, 0x0100, 0x024F, 0x0300, 0x03FF, 0x0400, 0x052F, 0x0600, 0x06FF, 0x0E00, 0x0E7F, 0x2DE0, 0x2DFF, 0x2000, 0x206F, 0x3000, 0x30FF, 0x31F0, 0x31FF, 0xFF00, 0xFFEF, 0x4E00, 0x9FAF, 0xA640, 0xA69F, 0x3131, 0x3163, 0xAC00, 0xD7A3, 0};
+        builder.AddRanges(Ranges);
+        builder.AddRanges(Io->Fonts->GetGlyphRangesChineseSimplifiedCommon());
+        builder.BuildRanges(&RanGes);
+    }
+    ImFontConfig config;
+    config.FontDataOwnedByAtlas = false;
+    config.SizePixels = 45;
+    config.GlyphRanges = RanGes.Data;
+    config.OversampleH = 1;
+    config.OversampleV = 1;
+    return Io->Fonts->AddFontFromFileTTF(path, 0, &config);
+}
+bool loadSystemFont() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Диапазоны символов: Латиница + Кириллица (для русского меню)
+    static const  ImWchar ranges[] {0x0020, 0x00FF, 0x0100, 0x024F, 0x0300, 0x03FF, 0x0400, 0x052F, 0x0600, 0x06FF, 0x0E00, 0x0E7F, 0x2DE0, 0x2DFF, 0x2000, 0x206F, 0x3000, 0x30FF, 0x31F0, 0x31FF, 0xFF00, 0xFFEF, 0x4E00, 0x9FAF, 0xA640, 0xA69F, 0x3131, 0x3163, 0xAC00, 0xD7A3, 0};
+
+    // Настройка: шрифт не должен удаляться из памяти самим ImGui
+    ImFontConfig font_cfg;
+    font_cfg.FontDataOwnedByAtlas = false;
+
+    // Загружаем твой шрифт 'blem' из 'blemo.h'
+    // 42.0f - размер шрифта, ranges - поддержка языков
+    io.Fonts->AddFontFromMemoryTTF((void*)blem, sizeof(blem), 42.0f, &font_cfg, ranges);    
+    
+    return true;
+}
+
+bool ImGui_init() {
+    if (g_Initialized) {
+        return true;
+    }
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplAndroid_Init(native_window);
+    ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = NULL;
+    // 加载系统字体
+    bool success = loadSystemFont();
+    if (!success) {
+        // 处理加载字体失败的情况
+        return false;
+    }
+    ImGui::GetStyle().ScaleAllSizes(3.0f);
+    ImGuiMenustyle1();
+    ::g_Initialized = true;
+    return true;
+}
+
+
+void drawBegin() {
+    screen_config();
+    if (::orientation != displayInfo.orientation) {
+        ::orientation = displayInfo.orientation;
+        //UpdateScreenData(displayInfo.width, displayInfo.height, displayInfo.orientation);
+
+        }
+      ImGui_ImplVulkan_NewFrame();
+     ImGui_ImplAndroid_NewFrame(native_window_screen_x, native_window_screen_y);
+    ImGui::NewFrame();
+}
+
+void drawEnd() {
+    ImGui::Render();
+    FrameRender(ImGui::GetDrawData());
+    FramePresent();
+}
+
+void shutdown() {
+    if (!g_Initialized) {
+        return;
+    }
+    DeviceWait();
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplAndroid_Shutdown();
+    ImGui::DestroyContext();
+    CleanupVulkanWindow();
+    CleanupVulkan();
+    ANativeWindow_release(native_window);
+    android::ANativeWindowCreator::Destroy(native_window);
+    ::g_Initialized = false;
+}
