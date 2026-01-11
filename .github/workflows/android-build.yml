@@ -48,15 +48,20 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
-      - name: Download gradle-wrapper.jar
+      - name: Restore gradle-wrapper.jar using gradle wrapper task
         run: |
-          echo "=== Downloading gradle-wrapper.jar ==="
-          mkdir -p gradle/wrapper
-          cd gradle/wrapper
-          wget -q https://services.gradle.org/distributions/gradle-8.10-bin.zip
-          echo "Downloaded gradle-8.10-bin.zip"
-          ls -lah
-          cd ../..
+          echo "=== Installing Gradle to recreate wrapper ==="
+          gradle wrapper --gradle-version 8.10 2>&1 || echo "Gradle not installed, will use apt"
+          
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "=== Installing Gradle from apt ==="
+            apt-get update -qq
+            apt-get install -y gradle > /dev/null 2>&1
+            echo "Gradle installed, running wrapper task..."
+            gradle wrapper --gradle-version 8.10
+          fi
+          
+          ls -lah gradle/wrapper/
       
       - name: Full System Clean
         run: |
@@ -172,12 +177,12 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
-      - name: Download gradle-wrapper.jar
+      - name: Restore gradle-wrapper.jar
         run: |
-          mkdir -p gradle/wrapper
-          cd gradle/wrapper
-          wget -q https://services.gradle.org/distributions/gradle-8.10-bin.zip
-          cd ../..
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            apt-get update -qq && apt-get install -y gradle > /dev/null 2>&1
+            gradle wrapper --gradle-version 8.10
+          fi
       
       - name: Run lint checks
         run: |
