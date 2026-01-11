@@ -48,6 +48,27 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
+      - name: Initialize Gradle Wrapper
+        run: |
+          echo "=== Initializing Gradle Wrapper ==="
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Gradle wrapper JAR not found, downloading..."
+            mkdir -p gradle/wrapper
+            cd gradle/wrapper
+            curl -L -o gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar
+            cd ../..
+            echo "Gradle wrapper JAR downloaded successfully"
+          else
+            echo "Gradle wrapper JAR already exists"
+          fi
+          ls -lah gradle/wrapper/gradle-wrapper.jar
+      
+      - name: Validate Gradle wrapper
+        run: |
+          echo "=== Validating Gradle Wrapper ==="
+          ./gradlew --version
+          echo "Gradle wrapper validated successfully"
+      
       - name: Full System Clean
         run: |
           echo "=== Performing full system clean ==="
@@ -58,13 +79,6 @@ jobs:
           rm -rf app/src/main/jniLibs/
           rm -rf .gradle/
           echo "=== Gradle cache cleared ==="
-      
-      - name: Validate Gradle wrapper
-        run: |
-          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
-            echo "Gradle wrapper not found, downloading..."
-            ./gradlew wrapper --gradle-version=8.0
-          fi
       
       - name: Build APK (Debug)
         run: |
@@ -168,6 +182,16 @@ jobs:
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
+      
+      - name: Initialize Gradle Wrapper
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Gradle wrapper JAR not found, downloading..."
+            mkdir -p gradle/wrapper
+            cd gradle/wrapper
+            curl -L -o gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar
+            cd ../..
+          fi
       
       - name: Run lint checks
         run: |
