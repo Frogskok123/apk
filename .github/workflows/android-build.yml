@@ -37,18 +37,28 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-levels: 30
-          build-tools-version: 30.0.3
+          api-levels: 34
+          build-tools-version: 34.0.0
       
       - name: Accept Android licenses
         run: |
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses || true
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --update || true
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
+      - name: Validate Gradle wrapper
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Gradle wrapper not found, downloading..."
+            ./gradlew wrapper --gradle-version=8.0
+          fi
+      
       - name: Build APK (Debug)
-        run: ./gradlew assembleDebug --info -x lint
+        run: |
+          echo "Starting Gradle build..."
+          ./gradlew clean assembleDebug --info --no-daemon -x lint 2>&1 | tee build.log
         continue-on-error: false
       
       - name: Check build outputs
@@ -58,6 +68,9 @@ jobs:
           echo ""
           echo "=== Libraries ==="
           find app/build -name "*.so" -type f 2>/dev/null || echo "No SO files found"
+          echo ""
+          echo "=== Build Directory ==="
+          ls -lah app/build/ 2>/dev/null || echo "Build directory not found"
       
       - name: Upload debug APK
         if: success()
@@ -67,30 +80,12 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
       
-      - name: Generate build report
-        if: always()
-        run: |
-          echo "# Build Report" > build_report.md
-          echo "" >> build_report.md
-          echo "## Build Status" >> build_report.md
-          echo "- Date: $(date)" >> build_report.md
-          echo "- Branch: ${{ github.ref }}" >> build_report.md
-          echo "- Commit: ${{ github.sha }}" >> build_report.md
-          echo "" >> build_report.md
-          echo "## Build Info" >> build_report.md
-          if [ -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "- Debug APK: ✅ Built" >> build_report.md
-            echo "- Size: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)" >> build_report.md
-          else
-            echo "- Debug APK: ⚠️ Check logs" >> build_report.md
-          fi
-      
-      - name: Upload build report
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-report
-          path: build_report.md
+          name: build-log
+          path: build.log
           retention-days: 7
 
   ndk-build:
@@ -110,12 +105,13 @@ jobs:
       - name: Build with ndk-build
         run: |
           cd app/src/main/jni
-          echo "NDK version:"
+          echo "=== NDK Info ==="
           ndk-build --version
+          echo "NDK_ROOT: $ANDROID_NDK_ROOT"
           echo ""
-          echo "Building native libraries..."
+          echo "=== Building native libraries ==="
           ndk-build clean
-          ndk-build -j$(nproc) V=1
+          ndk-build -j$(nproc) V=1 2>&1 | tee ndk_build.log
       
       - name: Check compiled libraries
         run: |
@@ -135,6 +131,14 @@ jobs:
           name: native-libraries
           path: app/src/main/jniLibs/
           retention-days: 7
+      
+      - name: Upload NDK build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndk-build-log
+          path: app/src/main/jni/ndk_build.log
+          retention-days: 7
 
   code-quality:
     name: Code Quality
@@ -149,18 +153,23 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
+          cache: gradle
       
       - name: Make gradlew executable
         run: chmod +x ./gradlew
       
       - name: Run lint checks
-        run: ./gradlew lint --info -x assembleDebug 2>/dev/null || echo "Lint checks completed"
+        run: |
+          echo "Running lint checks..."
+          ./gradlew lint --info 2>&1 | tee lint.log || true
         continue-on-error: true
       
-      - name: Check for code issues
+      - name: Check results
         run: |
-          echo "Code quality checks completed"
-          echo "Check build/reports/ for detailed analysis"
+          echo "Lint checks completed"
+          if [ -f "app/build/reports/lint-results.html" ]; then
+            echo "Lint report generated"
+          fi
         continue-on-error: true
 
   security:
@@ -174,6 +183,12 @@ jobs:
       - name: Check for hardcoded credentials
         run: |
           echo "Scanning for hardcoded credentials..."
-          grep -r "apiKey\|password\|token" --include="*.java" --include="*.cpp" --include="*.gradle" app/ 2>/dev/null || echo "No obvious credentials found"
+          grep -r "apiKey\|password\|token\|secret" --include="*.java" --include="*.cpp" --include="*.gradle" app/ 2>/dev/null || echo "No obvious credentials found"
           echo "Security scan completed"
+        continue-on-error: true
+      
+      - name: Check for dangerous permissions
+        run: |
+          echo "Checking for dangerous permissions..."
+          grep -r "WRITE_EXTERNAL_STORAGE\|READ_EXTERNAL_STORAGE\|SYSTEM_ALERT_WINDOW" app/src/main/AndroidManifest.xml 2>/dev/null || echo "Standard permissions only"
         continue-on-error: true
